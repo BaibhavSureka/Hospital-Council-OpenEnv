@@ -16,3 +16,17 @@ physionet.org/
 # Local helper lists
 icu_files.txt
 hosp_links_2.txt
+
+# Generated run artifacts (not source code)
+artifacts/*.jsonl
+artifacts/*.log
+
+# Python tooling and build outputs
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/

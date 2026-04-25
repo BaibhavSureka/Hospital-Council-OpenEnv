@@ -1,0 +1,2 @@
+openenv-core[core]>=0.2.3
+pandas>=2.0.0

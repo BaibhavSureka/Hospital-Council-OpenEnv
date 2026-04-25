@@ -1,0 +1,34 @@
+spec_version: 1
+name: hospital_council_env
+version: 0.2.0
+description: >
+  A MIMIC-seeded multi-agent hospital coordination environment for OpenEnv.
+  The agent acts as a council coordinator managing physician, nurse, pharmacist,
+  bed-manager, and family-liaison incentives over long-horizon episodes.
+type: space
+runtime: fastapi
+app: server.app:app
+port: 8000
+
+client:
+  class_name: HospitalCouncilEnv
+  module: hospital_council_env.client
+
+action:
+  class_name: HospitalCouncilAction
+  module: hospital_council_env.models
+
+observation:
+  class_name: HospitalCouncilObservation
+  module: hospital_council_env.models
+
+state:
+  class_name: HospitalCouncilState
+  module: hospital_council_env.models
+
+metadata:
+  author: Baibhav Sureka
+  themes:
+    - Multi-Agent Interactions
+    - Long-Horizon Planning
+    - World Modeling
