@@ -123,6 +123,7 @@ class EpisodeSnapshot:
     message_log: List[str] = field(default_factory=list)
     repeated_actions: int = 0
     last_action_signature: str = ""
+    last_consult_target: str = ""
 
 
 @dataclass
@@ -512,7 +513,33 @@ class MIMICCouncilSimulator:
             self.scenario_buckets[self._classify_record(record)].append(record)
         for scenario in SCENARIO_TYPES:
             if not self.scenario_buckets[scenario]:
-                self.scenario_buckets[scenario] = list(self.records)
+                ranked = sorted(
+                    self.records,
+                    key=lambda item: self._scenario_affinity(scenario, item),
+                    reverse=True,
+                )
+                self.scenario_buckets[scenario] = ranked[: max(10, min(len(ranked), 100))]
+
+    def _scenario_affinity(self, scenario_type: str, record: EncounterRecord) -> float:
+        if scenario_type == "medication_alignment":
+            return float(record.med_count) + 0.2 * float(record.abnormal_lab_event_count)
+        if scenario_type == "discharge_negotiation":
+            return (
+                2.0 * float(record.expired_flag == 0 and record.in_icu == 0)
+                + 0.5 * float(record.los_hours >= 48)
+                - 0.3 * float(record.abnormal_lab_event_count)
+            )
+        if scenario_type == "conservative_monitoring":
+            return (
+                1.5 * float(record.med_count == 0)
+                + 1.0 * float(record.abnormal_lab_event_count <= 1)
+                + 0.5 * float(record.diag_count > 0)
+            )
+        return (
+            1.5 * float(record.diag_count == 0)
+            + 1.0 * float(record.abnormal_lab_event_count >= 2)
+            + 0.5 * float(record.proc_count > 0)
+        )
 
     def _classify_record(self, record: EncounterRecord) -> str:
         if record.abnormal_lab_event_count >= 3 and record.diag_count <= 1:
@@ -525,25 +552,73 @@ class MIMICCouncilSimulator:
             return "diagnostic_ambiguity"
         return "conservative_monitoring"
 
-    def _ground_truth_for_step(self, record: EncounterRecord, step_idx: int) -> str:
-        progress = step_idx / max(1, self.max_steps - 1)
-        if progress < 0.34:
-            if record.diag_count == 0 or record.abnormal_lab_event_count >= 2:
-                return "diagnosis"
-            if record.med_count > 0:
-                return "medication"
-            return "no_action"
-        if progress < 0.80:
-            if record.med_count > 0:
-                return "medication"
-            if record.proc_count > 0:
-                return "diagnosis"
-            return "no_action"
-        if record.expired_flag == 0 and record.in_icu == 0:
-            return "discharge"
-        if record.med_count > 0:
+    def _late_discharge_ready(self, record: EncounterRecord) -> bool:
+        return (
+            record.expired_flag == 0
+            and record.in_icu == 0
+            and record.abnormal_lab_event_count <= 1
+            and record.los_hours >= 48
+        )
+
+    def _ground_truth_for_step(
+        self,
+        scenario_type: str,
+        record: EncounterRecord,
+        step_idx: int,
+    ) -> str:
+        late_phase = step_idx >= max(0, self.max_steps - 2)
+        if scenario_type == "medication_alignment":
+            if step_idx == 0:
+                return "diagnosis" if (record.diag_count == 0 or record.abnormal_lab_event_count >= 2) else "medication"
+            if late_phase and self._late_discharge_ready(record):
+                return "discharge"
             return "medication"
+
+        if scenario_type == "conservative_monitoring":
+            if step_idx == 0 and (record.diag_count == 0 or record.abnormal_lab_event_count >= 3):
+                return "diagnosis"
+            if late_phase and self._late_discharge_ready(record):
+                return "discharge"
+            return "no_action"
+
+        if scenario_type == "discharge_negotiation":
+            if step_idx == 0 and record.abnormal_lab_event_count >= 3:
+                return "diagnosis"
+            if late_phase:
+                return "discharge" if self._late_discharge_ready(record) else "no_action"
+            return "no_action"
+
+        if step_idx <= 2:
+            return "diagnosis"
+        if late_phase:
+            return "discharge" if self._late_discharge_ready(record) else "no_action"
         return "no_action"
+
+    def _stage_expected_category(
+        self,
+        scenario_type: str,
+        expected_action_type: str,
+        base_category: str,
+        record: EncounterRecord,
+    ) -> str:
+        if base_category != "no_action":
+            return base_category
+        if expected_action_type == "propose":
+            if scenario_type == "medication_alignment":
+                return "medication"
+            if scenario_type == "discharge_negotiation":
+                return "discharge"
+            if scenario_type in {"diagnostic_ambiguity", "conservative_monitoring"}:
+                return "diagnosis"
+        if expected_action_type == "commit":
+            if scenario_type == "medication_alignment":
+                return "medication"
+            if scenario_type == "discharge_negotiation" or self._late_discharge_ready(record):
+                return "discharge"
+            return "diagnosis"
+        if expected_action_type == "resolve" and scenario_type == "discharge_negotiation":
+            return "discharge"
+        return base_category
 
     def _sample_record(self, scenario_type: Optional[str] = None) -> Tuple[str, EncounterRecord]:
         if scenario_type is None:
@@ -629,69 +704,105 @@ class MIMICCouncilSimulator:
     def _build_stages(self, scenario_type: str, record: EncounterRecord) -> List[CouncilStage]:
         stages: List[CouncilStage] = []
         for step_idx in range(self.max_steps):
-            ground_truth = self._ground_truth_for_step(record, step_idx)
+            ground_truth = self._ground_truth_for_step(scenario_type, record, step_idx)
             if step_idx == 0:
+                expected_action_type = "consult"
                 stages.append(
                     CouncilStage(
                         step_index=step_idx,
                         phase_name="sensemaking",
-                        expected_action_type="consult",
-                        expected_category=ground_truth,
+                        expected_action_type=expected_action_type,
+                        expected_category=self._stage_expected_category(
+                            scenario_type,
+                            expected_action_type,
+                            ground_truth,
+                            record,
+                        ),
                         preferred_targets=(PRIMARY_TARGETS[scenario_type],),
                         rationale="Open by consulting the stakeholder most likely to reduce uncertainty.",
                     )
                 )
             elif step_idx == 1:
+                expected_action_type = "propose"
                 stages.append(
                     CouncilStage(
                         step_index=step_idx,
                         phase_name="alignment",
-                        expected_action_type="propose",
-                        expected_category=ground_truth,
+                        expected_action_type=expected_action_type,
+                        expected_category=self._stage_expected_category(
+                            scenario_type,
+                            expected_action_type,
+                            ground_truth,
+                            record,
+                        ),
                         preferred_targets=(PRIMARY_TARGETS[scenario_type], SECONDARY_TARGETS[scenario_type]),
                         rationale="Turn signals into an explicit directional plan the council can react to.",
                     )
                 )
             elif step_idx == 2:
+                expected_action_type = "commit"
                 stages.append(
                     CouncilStage(
                         step_index=step_idx,
                         phase_name="execution",
-                        expected_action_type="commit",
-                        expected_category=ground_truth,
+                        expected_action_type=expected_action_type,
+                        expected_category=self._stage_expected_category(
+                            scenario_type,
+                            expected_action_type,
+                            ground_truth,
+                            record,
+                        ),
                         preferred_targets=(PRIMARY_TARGETS[scenario_type],),
                         rationale="Make the first concrete move once the council has enough direction.",
                     )
                 )
             elif step_idx == self.max_steps - 2:
+                expected_action_type = "resolve"
                 stages.append(
                     CouncilStage(
                         step_index=step_idx,
                         phase_name="conflict_resolution",
-                        expected_action_type="resolve",
-                        expected_category=ground_truth,
+                        expected_action_type=expected_action_type,
+                        expected_category=self._stage_expected_category(
+                            scenario_type,
+                            expected_action_type,
+                            ground_truth,
+                            record,
+                        ),
                         preferred_targets=(SECONDARY_TARGETS[scenario_type], "family_liaison"),
                         rationale="Late-stage friction needs to be managed so the final action can land cleanly.",
                     )
                 )
             elif step_idx == self.max_steps - 1:
+                expected_action_type = "commit"
                 stages.append(
                     CouncilStage(
                         step_index=step_idx,
                         phase_name="handoff",
-                        expected_action_type="commit",
-                        expected_category=ground_truth,
+                        expected_action_type=expected_action_type,
+                        expected_category=self._stage_expected_category(
+                            scenario_type,
+                            expected_action_type,
+                            ground_truth,
+                            record,
+                        ),
                         preferred_targets=("bed_manager", "family_liaison"),
                         rationale="Finish the episode with a decisive long-horizon handoff move.",
                     )
                 )
             else:
+                expected_action_type = "delegate"
                 stages.append(
                     CouncilStage(
                         step_index=step_idx,
                         phase_name="coordination",
-                        expected_action_type="delegate",
-                        expected_category=ground_truth,
+                        expected_action_type=expected_action_type,
+                        expected_category=self._stage_expected_category(
+                            scenario_type,
+                            expected_action_type,
+                            ground_truth,
+                            record,
+                        ),
                         preferred_targets=(SECONDARY_TARGETS[scenario_type],),
                         rationale="Keep the right stakeholder looped in while the plan unfolds.",
                     )
@@ -785,6 +896,24 @@ class MIMICCouncilSimulator:
             "phase_name": stage.phase_name,
         }
 
+    def _validate_action(self, action: Dict[str, Any], stage: CouncilStage) -> Tuple[bool, List[str]]:
+        action_type = str(action.get("action_type", "") or "").strip()
+        target = str(action.get("target", "") or "").strip()
+        category = str(action.get("category", "") or "").strip()
+        reasons: List[str] = []
+
+        if action_type in {"consult", "delegate", "resolve"} and not target:
+            reasons.append(f"{action_type} requires a target")
+        if action_type in {"propose", "commit"} and not category:
+            reasons.append(f"{action_type} requires a category")
+        if action_type == "consult" and category:
+            reasons.append("consult should not set a category")
+        if action_type in {"propose", "commit"} and target:
+            reasons.append(f"{action_type} does not use a target in this environment")
+        if action_type not in {"consult", "propose", "delegate", "resolve", "commit"}:
+            reasons.append("unknown action type")
+        return (len(reasons) == 0, reasons)
+
     def _build_task_graph(
         self,
         snapshot: EpisodeSnapshot,
@@ -792,12 +921,18 @@ class MIMICCouncilSimulator:
         action: Dict[str, Any],
         task_graph_loss: float,
         task_graph_score: float,
+        active_step_index: Optional[int] = None,
     ) -> Dict[str, Any]:
+        active_index = (
+            min(max(0, int(active_step_index)), len(snapshot.stages) - 1)
+            if active_step_index is not None
+            else snapshot.step_count
+        )
         nodes = []
         for item in snapshot.stages:
-            if item.step_index < snapshot.step_count:
+            if item.step_index < active_index:
                 status = "complete"
-            elif item.step_index == snapshot.step_count:
+            elif item.step_index == active_index:
                 status = "active"
             else:
                 status = "pending"
@@ -812,7 +947,7 @@ class MIMICCouncilSimulator:
                 }
             )
         return {
-            "active_node": f"step_{stage.step_index}_{stage.phase_name}",
+            "active_node": f"step_{snapshot.stages[active_index].step_index}_{snapshot.stages[active_index].phase_name}",
             "loss": round(task_graph_loss, 4),
             "score": round(task_graph_score, 4),
             "nodes": nodes,
@@ -836,6 +971,7 @@ class MIMICCouncilSimulator:
         medication_match: bool,
         safety_score: float,
         visible_conflicts: Sequence[str],
+        action_valid: bool,
     ) -> float:
         phase_loss = 0.0 if action_type_match else 1.0
         if category_match:
@@ -860,6 +996,8 @@ class MIMICCouncilSimulator:
             + 0.15 * safety_loss
             + 0.05 * conflict_loss
         )
+        if not action_valid:
+            loss += 0.20
         return max(0.0, min(1.0, loss))
 
     def _build_web_augmentation(
@@ -930,10 +1068,18 @@ class MIMICCouncilSimulator:
         medication = str(action.get("medication") or "").strip()
         message = str(action.get("message") or "").strip()
         action_signature = f"{action_type}|{target}|{category}|{medication}|{message}"
+        action_valid, invalid_reasons = self._validate_action(action, stage)
+        previous_consult_target = snapshot.last_consult_target
 
         action_type_match = action_type == stage.expected_action_type
-        category_match = category == stage.expected_category if category else False
-        target_match = not stage.preferred_targets or target in stage.preferred_targets
+        if stage.expected_category == "no_action":
+            category_match = True
+        else:
+            category_match = category == stage.expected_category if category else False
+        if action_type in {"propose", "commit"}:
+            target_match = True
+        else:
+            target_match = not stage.preferred_targets or target in stage.preferred_targets
         medication_match = (
             stage.expected_category != "medication"
             or self._medication_match(medication or message, snapshot.record)
@@ -948,10 +1094,15 @@ class MIMICCouncilSimulator:
             milestone_score += 0.10
         if medication_match:
             milestone_score += 0.10
+        if not action_valid:
+            milestone_score -= 0.25
         milestone_score = max(0.0, min(1.0, milestone_score))
 
         stakeholder_updates: List[str] = []
-        if action_type == "consult" and target in snapshot.stakeholders:
+        if not action_valid:
+            stakeholder_updates.append(f"Validation: {'; '.join(invalid_reasons)}.")
+
+        if action_type == "consult" and action_valid and target in snapshot.stakeholders:
             stakeholder = snapshot.stakeholders[target]
             stakeholder.consulted += 1
             stakeholder.alignment = min(1.0, stakeholder.alignment + (0.14 if target_match else 0.04))
@@ -961,8 +1112,10 @@ class MIMICCouncilSimulator:
                 snapshot.patient_snapshot.setdefault("consulted_stakeholders", []).append(target)
             if target in ("attending_physician", "triage_nurse"):
                 snapshot.diagnostic_clarity = snapshot.diagnostic_clarity or stage.expected_category == "diagnosis"
+            if previous_consult_target == target:
+                stakeholder_updates.append("System: Repeated consult on the same stakeholder added less new information.")
 
-        if action_type in ("propose", "delegate", "resolve", "commit"):
+        if action_type in ("propose", "delegate", "resolve", "commit") and action_valid:
             primary = snapshot.stakeholders[PRIMARY_TARGETS[snapshot.scenario_type]]
             secondary = snapshot.stakeholders[SECONDARY_TARGETS[snapshot.scenario_type]]
             if category_match:
@@ -972,23 +1125,25 @@ class MIMICCouncilSimulator:
                 primary.alignment = max(0.0, primary.alignment - 0.10)
                 secondary.alignment = max(0.0, secondary.alignment - 0.05)
 
-        if action_type == "resolve" and snapshot.visible_conflicts:
+        if action_type == "resolve" and action_valid and snapshot.visible_conflicts:
             snapshot.visible_conflicts = snapshot.visible_conflicts[1:]
             stakeholder_updates.append("System: One visible conflict eased after the coordinator addressed it directly.")
 
-        if action_type == "commit" and category == "medication" and category_match and medication_match:
+        if action_type == "commit" and action_valid and category == "medication" and category_match and medication_match:
             snapshot.medication_started = True
             stakeholder_updates.append("System: Treatment was started and the council moved from debate to action.")
-        if action_type == "commit" and category == "discharge" and category_match:
+        if action_type == "commit" and action_valid and category == "discharge" and category_match:
             snapshot.discharge_ready = True
             stakeholder_updates.append("System: Transition planning moved into a real handoff state.")
-        if action_type in ("propose", "commit") and category == "diagnosis" and category_match:
+        if action_type in ("propose", "commit") and action_valid and category == "diagnosis" and category_match:
             snapshot.diagnostic_clarity = True
 
         coalition_values = [item.alignment for item in snapshot.stakeholders.values()]
         coalition_score = sum(coalition_values) / max(1, len(coalition_values))
 
         safety_score = 1.0
+        if not action_valid:
+            safety_score -= 0.15
         if action_type == "commit" and category == "discharge" and stage.expected_category != "discharge":
             safety_score -= 0.65
         if action_type == "commit" and category == "medication" and not snapshot.diagnostic_clarity and snapshot.scenario_type == "diagnostic_ambiguity":
@@ -1007,6 +1162,7 @@ class MIMICCouncilSimulator:
             medication_match=medication_match,
             safety_score=safety_score,
             visible_conflicts=snapshot.visible_conflicts,
+            action_valid=action_valid,
         )
         task_graph_score = 1.0 - task_graph_loss
         task_graph = self._build_task_graph(
@@ -1015,24 +1171,32 @@ class MIMICCouncilSimulator:
             action=action,
             task_graph_loss=task_graph_loss,
             task_graph_score=task_graph_score,
+            active_step_index=min(snapshot.step_count + 1, len(snapshot.stages) - 1),
         )
         web_augmentation = self._build_web_augmentation(snapshot, stage, action)
 
         if snapshot.last_action_signature == action_signature and action_signature:
             snapshot.repeated_actions += 1
+        else:
+            snapshot.repeated_actions = 0
         snapshot.last_action_signature = action_signature
         efficiency_score = max(0.0, 1.0 - 0.12 * snapshot.repeated_actions)
-        if action_type == "consult" and target in snapshot.message_log[-2:]:
+        if action_type == "consult" and target and previous_consult_target == target and snapshot.repeated_actions > 0:
             efficiency_score = max(0.0, efficiency_score - 0.10)
+        if action_type == "consult" and action_valid:
+            snapshot.last_consult_target = target
 
         done = snapshot.step_count + 1 >= self.max_steps
-        if action_type == "commit" and category == "discharge" and stage.expected_category == "discharge":
+        if action_valid and action_type == "commit" and category == "discharge" and stage.expected_category == "discharge":
             done = True
 
         terminal_score = 0.0
         if done:
             coalition_gate = coalition_score >= 0.58
-            action_gate = category == stage.expected_category if action_type == "commit" else action_type_match
+            if action_type == "commit" and stage.expected_category != "no_action":
+                action_gate = category == stage.expected_category
+            else:
+                action_gate = action_type_match
             terminal_score = 1.0 if coalition_gate and action_gate and safety_score >= 0.7 else 0.25
 
         if milestone_score >= 0.85:

@@ -137,6 +137,7 @@ class HospitalCouncilState(State):
         default="medium",
         description="Difficulty level.",
     )
+    step_count: int = Field(default=0, ge=0, description="Current episode step index.")
     max_steps: int = Field(default=8, ge=1, description="Maximum episode length.")
     coalition_support: Dict[str, float] = Field(
         default_factory=dict,

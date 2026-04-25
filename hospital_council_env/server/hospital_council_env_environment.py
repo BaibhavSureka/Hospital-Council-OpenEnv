@@ -168,6 +168,8 @@ class HospitalCouncilEnvironment(
     ) -> HospitalCouncilObservation:
         if self._snapshot is None:
             raise RuntimeError("Call reset() before step().")
+        if self._snapshot.done:
+            raise RuntimeError("Episode already terminated. Call reset() before step().")
 
         advance = self.simulator.advance(self._snapshot, action.model_dump())
         evaluation = advance["evaluation"]
