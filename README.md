@@ -10,9 +10,13 @@ Core files:
 The environment is designed for fast iteration workflows:
 
 - Uses sampled admissions for lightweight episodes.
-- Accepts both discrete and structured action payloads.
+- Supports a tester agent that generates intentionally vague evaluation queries.
+- Accepts both discrete and structured primary-agent action payloads.
+- Executes every action immediately inside the environment.
 - Validates medication actions against medication text seen in MIMIC tables.
-- Builds LLM-ready step payloads and accepts a pluggable observer callback.
+- Builds structured LLM-ready state payloads with retrieval, memory, and web context.
+- Accepts a pluggable reasoning module for action evaluation.
+- Gives the primary agent a state/context view without exposing ground-truth labels.
 
 ## Decision Space
 
@@ -40,6 +44,11 @@ Actions can be either:
 
 Supported dictionary keys include `category`/`category_id`, `tester_prompt`, `agent_response`, and `action_text`.
 
+The environment can also run a continuous tester-primary-agent loop through:
+
+- `run_agent_episode(...)`
+- `run_continuous_loop(...)`
+
 ## Observation Space
 
 `observation_space = Box(shape=(16,), dtype=float32)`.
@@ -65,14 +74,20 @@ Feature layout:
 
 ## Reward Logic
 
-Per-step reward is category alignment plus medication consistency checks:
+Per-step reward is now produced by a reasoning-driven evaluation pipeline:
 
-- `+1.0` if predicted category equals step ground truth, else `-0.5`.
-- Additional medication bonus/penalty when action is `medication`:
-  - `+0.4` if medication term is found in MIMIC medication index.
-  - `-0.4` if not found.
-- If `tester_prompt` implies a different medication term than the action term: `-0.2`.
-- Step cost: `-0.01`.
+- The environment derives a ground-truth action for the current step.
+- If the agent action is an exact match, it is marked correct immediately.
+- Otherwise the environment runs:
+  - internal database validation
+  - similar trajectory retrieval from persistent memory
+  - optional web augmentation for the query and action
+- These signals are merged into a structured state and passed to a reasoning module.
+- The reasoning module returns:
+  - `correct`, `partially_correct`, or `incorrect`
+  - a probability distribution over those labels
+  - a confidence score
+- The environment converts that structured observation into the scalar reward.
 
 Episode terminates when:
 
@@ -118,6 +133,8 @@ If you use classic Gym instead of Gymnasium:
 ```bash
 pip install gym
 ```
+
+If neither package is installed, `mimic_openenv.py` falls back to a lightweight internal compatibility layer so the demo can still run.
 
 ## Quick Start
 
@@ -195,7 +212,9 @@ Probabilities are normalized in the environment before being used.
 
 These compute:
 
-- Accuracy
+- Category accuracy
+- Exact action match rate
+- Reasoning-correct rate
 - Per-category precision/recall/F1/support
 - Confusion matrix
 - Average reward across episodes
