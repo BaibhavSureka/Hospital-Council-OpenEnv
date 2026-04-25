@@ -40,6 +40,8 @@ def evaluate_policy(
     coalition_hits = 0
     task_graph_losses = []
     web_augmented_steps = 0
+    context_confidences = []
+    guided_replace_steps = 0
     total_steps = 0
     scenario_counts = Counter()
     scenario_rewards = defaultdict(list)
@@ -70,7 +72,9 @@ def evaluate_policy(
             terminal = float(obs.metadata.get("subscores", {}).get("terminal", 0.0))
             coalition = float(obs.scoreboard.get("coalition_support", 0.0))
             task_graph_losses.append(float(obs.scoreboard.get("task_graph_loss", 0.0)))
-            web_augmented_steps += int(str(obs.web_augmentation.get("status", "")) in ("serper", "offline"))
+            web_augmented_steps += int(str(obs.web_augmentation.get("status", "")) == "llm_simulated_search")
+            context_confidences.append(float(obs.context_observation.get("confidence", 0.0)))
+            guided_replace_steps += int(str(obs.context_observation.get("next_step_guidance", "")) == "replace")
             if milestone >= 0.85:
                 milestone_hits += 1
             if coalition >= 0.58:
@@ -92,6 +96,8 @@ def evaluate_policy(
         "coalition_threshold_rate": coalition_hits / max(1, total_steps),
         "avg_task_graph_loss": mean(task_graph_losses) if task_graph_losses else 0.0,
         "web_augmented_step_rate": web_augmented_steps / max(1, total_steps),
+        "avg_context_confidence": mean(context_confidences) if context_confidences else 0.0,
+        "guided_replace_rate": guided_replace_steps / max(1, total_steps),
         "total_steps": total_steps,
         "scenario_breakdown": {
             scenario: {
@@ -137,6 +143,8 @@ def main() -> None:
     print(f"Coalition Threshold Rate: {metrics['coalition_threshold_rate']:.4f}")
     print(f"Average Task-Graph Loss: {metrics['avg_task_graph_loss']:.4f}")
     print(f"Web-Augmented Step Rate: {metrics['web_augmented_step_rate']:.4f}")
+    print(f"Average Context Confidence: {metrics['avg_context_confidence']:.4f}")
+    print(f"Guided Replace Rate: {metrics['guided_replace_rate']:.4f}")
     print("")
     print("Per Scenario:")
     for scenario, values in metrics["scenario_breakdown"].items():

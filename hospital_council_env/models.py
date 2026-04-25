@@ -101,7 +101,11 @@ class HospitalCouncilObservation(Observation):
     )
     web_augmentation: Dict[str, Any] = Field(
         default_factory=dict,
-        description="External evidence signals mapped to the current query-action pair.",
+        description="LLM-simulated retrieval signals mapped to the current query-action pair.",
+    )
+    context_observation: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Context LLM Manager output with classification, correction, and next-step guidance.",
     )
     available_actions: List[str] = Field(
         default_factory=list,
@@ -165,6 +169,10 @@ class HospitalCouncilState(State):
     web_augmentation: Dict[str, Any] = Field(
         default_factory=dict,
         description="Latest web augmentation state used by the reasoning payload.",
+    )
+    context_observation: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Latest actionable context observation used to guide the next action.",
     )
     archived_trajectory_size: int = Field(
         default=0,

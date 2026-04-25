@@ -41,7 +41,7 @@ This environment is designed for the OpenEnv Hackathon themes rather than just b
 - **Long-horizon planning**: the right move depends on what happened several turns earlier.
 - **World modeling**: the patient trajectory, coalition support, and safety state all evolve over time.
 - **Dynamic monitoring**: each episode exposes an active task graph and a task-graph loss that changes after every action.
-- **External knowledge**: optional Serper search turns web evidence into structured query-action signals.
+- **Self-contained retrieval**: an LLM-style search module generates and ranks pseudo-documents for the query-action pair.
 
 ## Action Space
 
@@ -71,7 +71,8 @@ Each step returns a partially observed view containing:
 - visible conflicts
 - retrieved analogies from historical failures
 - task-graph monitoring state
-- web augmentation signals
+- LLM-search augmentation signals
+- Context LLM Manager feedback
 - long-horizon goals
 - scoreboard metrics
 
@@ -98,9 +99,20 @@ This makes the reward signal dense enough for training while still keeping a mea
 
 ## Augmentation
 
-The observation includes `task_graph` and `web_augmentation` fields. `task_graph.loss` monitors whether the current action matches the active phase node. `web_augmentation` contains action descriptions, valid use cases, supporting evidence, and trajectory overlaps.
+The observation includes `task_graph`, `web_augmentation`, and `context_observation` fields. `task_graph.loss` monitors whether the current action matches the active phase node. `web_augmentation` contains simulated search results, valid use cases, supporting evidence, and trajectory overlaps. `context_observation` adds classification, confidence, correction, and next-step guidance.
 
-Set `SERPER_API_KEY` to use live Serper search. Without it, the environment returns deterministic offline evidence from the internal stage graph.
+This retrieval layer is fully self-contained and does not require external APIs.
+
+## MIMIC Lab Signals
+
+The environment now reads `hosp/labevents.csv.gz` and `hosp/d_labitems.csv.gz` and injects lab burden into the patient snapshot:
+
+- `lab_signal_count`
+- `abnormal_lab_signal_count`
+- `salient_labs`
+- `salient_lab_categories`
+
+Those lab signals feed scenario framing, diagnostic uncertainty, and the LLM-style retrieval context.
 
 ## Local Development
 

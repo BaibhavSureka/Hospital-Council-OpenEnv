@@ -22,14 +22,14 @@ The core idea is stronger than the earlier baseline: the model is not just predi
 - **Theme 4: Dynamic Monitoring**
   The environment exposes an active task graph and monitoring loss so rollouts show whether each action is reducing phase-level planning error.
 - **Theme 5: External Knowledge**
-  Optional Serper search enriches query-action pairs with external evidence and maps those signals back onto prior trajectories.
+  A self-contained LLM-style search module generates pseudo-documents, ranks them, and maps them onto prior trajectories without relying on external APIs.
 
 ## What Changed
 
 - `hospital_council_env/`: new official OpenEnv package scaffold and implementation.
 - `hospital_council_env/server/hospital_council_env_environment.py`: OpenEnv server environment.
 - `hospital_council_env/simulator.py`: MIMIC-derived scenario sampler, long-horizon phase plan, stakeholder dynamics, historical retrieval.
-- `hospital_council_env/augmentation.py`: optional Serper web-search augmentation and trajectory overlap signals.
+- `hospital_council_env/augmentation.py`: LLM-style pseudo-search generation plus a Context LLM Manager for corrective feedback.
 - `hospital_council_env/rubrics.py`: composable reward logic using OpenEnv rubrics.
 - `hospital_council_env/training/hf_trl_grpo_minimal.py`: minimal Hugging Face TRL script.
 - `run_openenv_demo.py`: top-level local demo entrypoint for the new environment.
@@ -61,7 +61,8 @@ The observation is only partially observed and includes:
 - visible conflicts
 - retrieved analogies from historical failures
 - task-graph monitoring loss
-- web augmentation signals
+- LLM-search augmentation signals
+- Context LLM Manager feedback
 - long-horizon goals
 - scoreboard metrics
 
@@ -72,6 +73,7 @@ The hidden state tracks:
 - diagnostic clarity
 - medication progress
 - discharge readiness
+- `labevents`-derived lab burden and salient lab cues
 
 ## Reward Design
 
@@ -93,9 +95,21 @@ These are combined in `HospitalCouncilRubric` with a weighted sum.
 Every step now appends two signals to the structured observation:
 
 - `task_graph`: active phase node, expected action/category/targets, and `task_graph_loss`.
-- `web_augmentation`: action description, valid use cases, supporting evidence, and overlap with archived trajectories.
+- `web_augmentation`: simulated LLM search results, ranked pseudo-documents, consistency checks, and trajectory overlaps.
+- `context_observation`: classification, probabilities, confidence, correction signal, and next-step guidance.
 
-Set `SERPER_API_KEY` to enable live Serper search. Without a key, the environment emits deterministic offline evidence from the internal stage graph so the demo remains reproducible.
+This retrieval path is fully self-contained. The environment constructs prompt-like search tasks, generates multiple pseudo-results, ranks them for relevance, and feeds the resulting structure into the reasoning loop.
+
+## Lab Integration
+
+The environment now integrates `hosp/labevents.csv.gz` and `hosp/d_labitems.csv.gz` into the encounter representation. For sampled admissions it tracks:
+
+- total lab event count
+- abnormal lab event count
+- salient abnormal lab labels
+- salient lab categories
+
+These signals appear in the patient snapshot and influence scenario framing, diagnostic pressure, and the simulated retrieval context.
 
 ## Quick Start
 
@@ -127,6 +141,8 @@ That prints:
 - coalition threshold rate
 - average task-graph loss
 - web-augmented step rate
+- average context confidence
+- guided replace rate
 - per-scenario averages
 
 Validate the environment package:

@@ -30,10 +30,39 @@ ALL_STAKEHOLDERS = [
 ]
 
 
+def _guided_action(obs) -> HospitalCouncilAction | None:
+    context = getattr(obs, "context_observation", {}) or {}
+    guidance = str(context.get("next_step_guidance", "") or "")
+    recommended = context.get("recommended_next_action", {}) or {}
+    if guidance not in {"retain", "refine", "replace"} or not recommended:
+        return None
+
+    action_type = str(recommended.get("action_type", "") or "")
+    if action_type not in {"consult", "propose", "delegate", "resolve", "commit"}:
+        return None
+
+    category = recommended.get("category") or None
+    target = recommended.get("target") or None
+    meds = list(obs.patient_snapshot.get("candidate_medications", []))
+    medication = recommended.get("medication") or (meds[0] if category == "medication" and meds else None)
+    message = recommended.get("message") or f"Follow context guidance during {obs.phase_name}."
+    return HospitalCouncilAction(
+        action_type=action_type,
+        target=target if action_type in ("consult", "delegate", "resolve") else None,
+        category=category if action_type != "consult" else None,
+        medication=medication,
+        message=message,
+        confidence=float(context.get("confidence", 0.6) or 0.6),
+    )
+
+
 def baseline_policy(obs) -> HospitalCouncilAction:
     scenario = obs.scenario_type
     phase = obs.phase_name
     meds = list(obs.patient_snapshot.get("candidate_medications", []))
+    guided = _guided_action(obs)
+    if guided is not None:
+        return guided
     if phase == "sensemaking":
         return HospitalCouncilAction(
             action_type="consult",

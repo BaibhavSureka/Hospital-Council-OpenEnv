@@ -16,9 +16,15 @@ Show one rollout step and point to three live signals:
 
 This makes the environment feel dynamic because the reward is tied to progress through an evolving graph, not a static one-step classifier.
 
-## Web Augmentation Moment
+## Retrieval Moment
 
-Show the `web_status` and `web_valid_cases` fields in the recorded rollout. With `SERPER_API_KEY` configured, the environment calls Serper for external evidence about the query-action pair. Without a key, it still emits deterministic offline evidence from the internal stage graph so the demo is reproducible.
+Show the `web_status`, `web_valid_cases`, and `next_step_guidance` fields in the recorded rollout. The environment now simulates search internally: it builds structured prompt-style queries, generates multiple pseudo-results, ranks them, and maps them onto prior trajectories. Then the Context LLM Manager turns that into correction and next-step guidance.
+
+Call out the lab-aware state as well:
+
+- `salient_labs`
+- `abnormal_lab_signal_count`
+- how those lab cues change the simulated retrieval results
 
 ## Training Story
 
@@ -30,6 +36,8 @@ Run the evaluator and show:
 - category accuracy
 - average task-graph loss
 - web-augmented step rate
+- average context confidence
+- guided replace rate
 
 ## Commands To Record
 
@@ -41,9 +49,4 @@ Run the evaluator and show:
 .\.venv\Scripts\python.exe -m hospital_council_env.training.evaluate_policy --data-root physionet.org/files/mimiciv/3.1 --episodes 20 --sample-size 1000 --policy baseline
 ```
 
-Optional live web evidence:
-
-```bash
-$env:SERPER_API_KEY="your_key_here"
-.\.venv\Scripts\python.exe run_openenv_demo.py --data-root physionet.org/files/mimiciv/3.1 --episodes 1 --sample-size 1000 --record-path artifacts/demo_rollout_serper.jsonl
-```
+The environment is fully self-contained, so no external API setup is required for the video.

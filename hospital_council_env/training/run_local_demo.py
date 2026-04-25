@@ -65,6 +65,9 @@ def main() -> None:
                 "task_graph_loss": observation.scoreboard.get("task_graph_loss", 0.0),
                 "web_status": observation.web_augmentation.get("status", ""),
                 "web_valid_cases": observation.web_augmentation.get("valid_use_cases", [])[:2],
+                "context_classification": observation.context_observation.get("classification", ""),
+                "next_step_guidance": observation.context_observation.get("next_step_guidance", ""),
+                "correction_signal": observation.context_observation.get("correction_signal", {}),
             }
             print(event)
             recording.append(event)

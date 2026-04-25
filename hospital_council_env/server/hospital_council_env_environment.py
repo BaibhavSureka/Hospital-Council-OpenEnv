@@ -98,6 +98,7 @@ class HospitalCouncilEnvironment(
             "task_graph_score": round(float(self._snapshot.task_graph.get("score", 0.0)), 4),
             "task_graph_loss": round(float(self._snapshot.task_graph.get("loss", 0.0)), 4),
             "web_evidence_count": float(self._snapshot.web_augmentation.get("evidence_count", 0)),
+            "context_confidence": float(self._snapshot.context_observation.get("confidence", 0.0)),
         }
         metadata = {
             "subscores": subscores or {},
@@ -105,6 +106,7 @@ class HospitalCouncilEnvironment(
             "stakeholder_descriptions": dict(STAKEHOLDER_DESCRIPTIONS),
             "task_graph": dict(self._snapshot.task_graph),
             "web_augmentation": dict(self._snapshot.web_augmentation),
+            "context_observation": dict(self._snapshot.context_observation),
         }
         return HospitalCouncilObservation(
             mission_brief=self._snapshot.mission_brief,
@@ -117,6 +119,7 @@ class HospitalCouncilEnvironment(
             retrieved_analogies=list(self._snapshot.retrieved_analogies),
             task_graph=dict(self._snapshot.task_graph),
             web_augmentation=dict(self._snapshot.web_augmentation),
+            context_observation=dict(self._snapshot.context_observation),
             available_actions=self._available_actions(),
             long_horizon_goals=list(self._snapshot.long_horizon_goals),
             scoreboard=scoreboard,

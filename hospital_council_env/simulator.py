@@ -18,9 +18,9 @@ import pandas as pd
 from pandas.errors import ParserError
 
 try:
-    from .augmentation import WebSearchAugmenter, timestamp_ms
+    from .augmentation import ContextLLMManager, LLMSearchAugmenter, timestamp_ms
 except ImportError:
-    from augmentation import WebSearchAugmenter, timestamp_ms
+    from augmentation import ContextLLMManager, LLMSearchAugmenter, timestamp_ms
 
 
 CATEGORY_TO_ID: Dict[str, int] = {
@@ -73,6 +73,10 @@ class EncounterRecord:
     proc_count: int
     transfer_count: int
     meds: Tuple[str, ...]
+    lab_event_count: int
+    abnormal_lab_event_count: int
+    salient_labs: Tuple[str, ...]
+    salient_lab_categories: Tuple[str, ...]
 
 
 @dataclass
@@ -115,6 +119,7 @@ class EpisodeSnapshot:
     retrieved_analogies: List[str] = field(default_factory=list)
     web_augmentation: Dict[str, Any] = field(default_factory=dict)
     task_graph: Dict[str, Any] = field(default_factory=dict)
+    context_observation: Dict[str, Any] = field(default_factory=dict)
     message_log: List[str] = field(default_factory=list)
     repeated_actions: int = 0
     last_action_signature: str = ""
@@ -131,6 +136,7 @@ class StepEvaluation:
     task_graph_loss: float
     task_graph: Dict[str, Any]
     web_augmentation: Dict[str, Any]
+    context_observation: Dict[str, Any]
     done: bool
     outcome_text: str
     stakeholder_updates: List[str]
@@ -175,7 +181,8 @@ class MIMICCouncilSimulator:
         sample_size: int = 3000,
         table_row_limit: Optional[int] = None,
         seed: Optional[int] = None,
-        web_augmenter: Optional[WebSearchAugmenter] = None,
+        llm_search_augmenter: Optional[LLMSearchAugmenter] = None,
+        context_manager: Optional[ContextLLMManager] = None,
     ) -> None:
         self.dataset_root = self._resolve_dataset_root(Path(data_root))
         self.max_steps = max(5, int(max_steps))
@@ -190,7 +197,8 @@ class MIMICCouncilSimulator:
         self.medication_terms: List[str] = []
         self.scenario_buckets: Dict[str, List[EncounterRecord]] = {name: [] for name in SCENARIO_TYPES}
         self.trajectory_archive: List[Dict[str, Any]] = []
-        self.web_augmenter = web_augmenter or WebSearchAugmenter.from_env()
+        self.llm_search_augmenter = llm_search_augmenter or LLMSearchAugmenter.from_env()
+        self.context_manager = context_manager or ContextLLMManager()
         self.scenario_cursor = 0
         self._load_data()
 
@@ -236,6 +244,65 @@ class MIMICCouncilSimulator:
         except (ParserError, MemoryError):
             return pd.read_csv(**kwargs, engine="python", on_bad_lines="skip")
 
+    def _read_filtered_csv(
+        self,
+        rel_path: str,
+        filter_col: str,
+        filter_values: Sequence[int],
+        usecols: Optional[Sequence[str]] = None,
+        parse_dates: Optional[Sequence[str]] = None,
+        chunksize: int = 200_000,
+    ) -> pd.DataFrame:
+        values = {_safe_int(value) for value in filter_values}
+        path = self.dataset_root / rel_path
+        columns = list(usecols) if usecols else []
+        if not path.exists() or not values:
+            return pd.DataFrame(columns=columns)
+
+        compression: Optional[str] = None
+        try:
+            with open(path, "rb") as handle:
+                compression = "gzip" if handle.read(2) == b"\x1f\x8b" else None
+        except OSError:
+            compression = None
+
+        chunks: List[pd.DataFrame] = []
+        try:
+            reader = pd.read_csv(
+                path,
+                usecols=columns or None,
+                parse_dates=list(parse_dates) if parse_dates else None,
+                compression=compression,
+                low_memory=False,
+                chunksize=chunksize,
+            )
+        except (ParserError, MemoryError):
+            reader = pd.read_csv(
+                path,
+                usecols=columns or None,
+                parse_dates=list(parse_dates) if parse_dates else None,
+                compression=compression,
+                low_memory=False,
+                chunksize=chunksize,
+                engine="python",
+                on_bad_lines="skip",
+            )
+
+        for chunk in reader:
+            if filter_col not in chunk.columns:
+                continue
+            filtered = chunk.dropna(subset=[filter_col]).copy()
+            if filtered.empty:
+                continue
+            filtered[filter_col] = filtered[filter_col].map(_safe_int)
+            filtered = filtered[filtered[filter_col].isin(values)]
+            if not filtered.empty:
+                chunks.append(filtered)
+
+        if not chunks:
+            return pd.DataFrame(columns=columns)
+        return pd.concat(chunks, ignore_index=True)
+
     def _build_medication_terms(self, med_frames: Sequence[pd.DataFrame]) -> List[str]:
         terms: set[str] = set()
         for frame in med_frames:
@@ -249,6 +316,30 @@ class MIMICCouncilSimulator:
                 if len(first) >= 3:
                     terms.add(first)
         return sorted(terms)
+
+    def _top_terms(
+        self,
+        frame: pd.DataFrame,
+        value_col: str,
+        group_col: str = "hadm_id",
+        limit: int = 4,
+    ) -> Dict[int, Tuple[str, ...]]:
+        if frame.empty or value_col not in frame.columns or group_col not in frame.columns:
+            return {}
+
+        cleaned = frame[[group_col, value_col]].dropna().copy()
+        if cleaned.empty:
+            return {}
+        cleaned[value_col] = cleaned[value_col].astype(str).map(_normalize_text)
+        cleaned = cleaned[cleaned[value_col] != ""]
+        if cleaned.empty:
+            return {}
+
+        output: Dict[int, Tuple[str, ...]] = {}
+        for hadm_id, group in cleaned.groupby(group_col):
+            values = group[value_col].value_counts().head(limit).index.tolist()
+            output[_safe_int(hadm_id)] = tuple(values)
+        return output
 
     def _load_data(self) -> None:
         admissions = self._read_csv(
@@ -284,6 +375,24 @@ class MIMICCouncilSimulator:
             usecols=["hadm_id", "medication"],
             nrows=self.table_row_limit,
         ).rename(columns={"medication": "medication_text"})
+        d_labitems = self._read_csv(
+            "hosp/d_labitems.csv.gz",
+            usecols=["itemid", "label", "category"],
+            nrows=self.table_row_limit,
+        )
+        labevents = self._read_csv(
+            "hosp/labevents.csv.gz",
+            usecols=[
+                "hadm_id",
+                "itemid",
+                "valuenum",
+                "flag",
+                "priority",
+                "ref_range_lower",
+                "ref_range_upper",
+            ],
+            nrows=max(250_000, self.sample_size * 500, self.table_row_limit * 5),
+        )
 
         admissions = admissions.dropna(subset=["hadm_id", "subject_id"])
         admissions["hadm_id"] = admissions["hadm_id"].astype(int)
@@ -312,10 +421,58 @@ class MIMICCouncilSimulator:
                 for row in patients.itertuples(index=False)
             }
 
+        lab_counts = pd.Series(dtype="int64")
+        abnormal_lab_counts = pd.Series(dtype="int64")
+        salient_labs_by_hadm: Dict[int, Tuple[str, ...]] = {}
+        salient_lab_categories_by_hadm: Dict[int, Tuple[str, ...]] = {}
+        if not labevents.empty:
+            labevents = labevents.dropna(subset=["hadm_id", "itemid"])
+            if not labevents.empty:
+                labevents["hadm_id"] = labevents["hadm_id"].astype(int)
+                labevents["itemid"] = labevents["itemid"].astype(int)
+                lab_items = d_labitems.dropna(subset=["itemid"]).copy() if not d_labitems.empty else pd.DataFrame()
+                if not lab_items.empty:
+                    lab_items["itemid"] = lab_items["itemid"].astype(int)
+                    lab_items = lab_items.drop_duplicates(subset=["itemid"])
+                    labevents = labevents.merge(lab_items, on="itemid", how="left")
+                else:
+                    labevents["label"] = ""
+                    labevents["category"] = ""
+                labevents["label"] = labevents["label"].fillna("")
+                labevents["category"] = labevents["category"].fillna("")
+                labevents["flag"] = labevents["flag"].fillna("").astype(str)
+                lab_counts = labevents.groupby("hadm_id").size()
+                abnormal_labs = labevents[labevents["flag"].str.strip() != ""]
+                abnormal_lab_counts = (
+                    abnormal_labs.groupby("hadm_id").size() if not abnormal_labs.empty else pd.Series(dtype="int64")
+                )
+                salient_labs_by_hadm = self._top_terms(
+                    abnormal_labs if not abnormal_labs.empty else labevents,
+                    "label",
+                )
+                salient_lab_categories_by_hadm = self._top_terms(
+                    abnormal_labs if not abnormal_labs.empty else labevents,
+                    "category",
+                )
+
         self.medication_terms = self._build_medication_terms(med_frames)
 
         if len(admissions) > self.sample_size:
-            admissions = admissions.sample(n=self.sample_size, random_state=42)
+            lab_supported = admissions[admissions["hadm_id"].isin(set(lab_counts.index.tolist()))]
+            sample_parts = []
+            if not lab_supported.empty:
+                target_lab_rows = min(len(lab_supported), max(1, int(self.sample_size * 0.5)))
+                sample_parts.append(lab_supported.sample(n=target_lab_rows, random_state=42))
+            sampled_ids = set()
+            if sample_parts:
+                sampled_ids = set(pd.concat(sample_parts)["hadm_id"].astype(int).tolist())
+            remaining_pool = admissions[~admissions["hadm_id"].isin(sampled_ids)]
+            remaining_needed = self.sample_size - sum(len(part) for part in sample_parts)
+            if remaining_needed > 0:
+                sample_parts.append(
+                    remaining_pool.sample(n=min(remaining_needed, len(remaining_pool)), random_state=43)
+                )
+            admissions = pd.concat(sample_parts, ignore_index=True).head(self.sample_size)
 
         records: List[EncounterRecord] = []
         for row in admissions.itertuples(index=False):
@@ -339,6 +496,10 @@ class MIMICCouncilSimulator:
                 proc_count=int(proc_counts.get(hadm_id, 0)),
                 transfer_count=int(transfer_counts.get(hadm_id, 0)),
                 meds=meds,
+                lab_event_count=int(lab_counts.get(hadm_id, 0)),
+                abnormal_lab_event_count=int(abnormal_lab_counts.get(hadm_id, 0)),
+                salient_labs=salient_labs_by_hadm.get(hadm_id, ()),
+                salient_lab_categories=salient_lab_categories_by_hadm.get(hadm_id, ()),
             )
             records.append(record)
         if not records:
@@ -354,6 +515,8 @@ class MIMICCouncilSimulator:
                 self.scenario_buckets[scenario] = list(self.records)
 
     def _classify_record(self, record: EncounterRecord) -> str:
+        if record.abnormal_lab_event_count >= 3 and record.diag_count <= 1:
+            return "diagnostic_ambiguity"
         if record.med_count > 0:
             return "medication_alignment"
         if record.expired_flag == 0 and record.in_icu == 0 and record.los_hours >= 48:
@@ -365,7 +528,7 @@ class MIMICCouncilSimulator:
     def _ground_truth_for_step(self, record: EncounterRecord, step_idx: int) -> str:
         progress = step_idx / max(1, self.max_steps - 1)
         if progress < 0.34:
-            if record.diag_count == 0:
+            if record.diag_count == 0 or record.abnormal_lab_event_count >= 2:
                 return "diagnosis"
             if record.med_count > 0:
                 return "medication"
@@ -398,28 +561,39 @@ class MIMICCouncilSimulator:
             "treatment_signal_count": record.med_count,
             "procedure_signal_count": record.proc_count,
             "transfer_signal_count": record.transfer_count,
+            "lab_signal_count": record.lab_event_count,
+            "abnormal_lab_signal_count": record.abnormal_lab_event_count,
             "candidate_medications": [_normalize_text(item) for item in record.meds if _normalize_text(item)][:3],
+            "salient_labs": list(record.salient_labs[:4]),
+            "salient_lab_categories": list(record.salient_lab_categories[:4]),
         }
 
     def _mission_brief(self, scenario_type: str, record: EncounterRecord) -> str:
+        lab_hint = ""
+        if record.abnormal_lab_event_count > 0 and record.salient_labs:
+            lab_hint = f" Recent lab abnormalities include {', '.join(record.salient_labs[:2])}."
         if scenario_type == "medication_alignment":
             return (
                 "Multiple teams think the patient may need active treatment, but the council has to "
                 "decide what to start, when to start it, and how to keep the pharmacist aligned."
+                f"{lab_hint}"
             )
         if scenario_type == "discharge_negotiation":
             return (
                 "Clinical pressure is easing, but operations, family expectations, and transition risk "
                 "are not fully aligned yet."
+                f"{lab_hint}"
             )
         if scenario_type == "conservative_monitoring":
             return (
                 "The case is stable enough to avoid overreacting, but everyone is watching for signs "
                 "that conservative management might no longer be enough."
+                f"{lab_hint}"
             )
         return (
             "The council is still piecing together what is really going on. Early confidence may be "
             "misleading, and the team needs the right information before making irreversible moves."
+            f"{lab_hint}"
         )
 
     def _long_horizon_goals(self, scenario_type: str) -> List[str]:
@@ -444,6 +618,10 @@ class MIMICCouncilSimulator:
             conflicts.append("Pharmacist wants specificity before treatment proceeds.")
         if scenario_type == "diagnostic_ambiguity":
             conflicts.append("Attending physician and triage nurse disagree on how much uncertainty remains.")
+        if record.abnormal_lab_event_count > 0 and record.salient_labs:
+            conflicts.append(
+                f"Lab signals ({', '.join(record.salient_labs[:2])}) raise uncertainty about whether the current plan is still valid."
+            )
         if record.transfer_count > 1:
             conflicts.append("Frequent handoffs created fragmented context across teams.")
         return conflicts[:3]
@@ -585,6 +763,28 @@ class MIMICCouncilSimulator:
         ranked.sort(key=lambda pair: pair[0], reverse=True)
         return [text for _, text in ranked[:limit]]
 
+    def _expected_action_payload(
+        self,
+        stage: CouncilStage,
+        scenario_type: str,
+        patient_snapshot: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        medications = list(patient_snapshot.get("candidate_medications", []))
+        category = stage.expected_category
+        medication = medications[0] if category == "medication" and medications else ""
+        target = stage.preferred_targets[0] if stage.preferred_targets else ""
+        if stage.expected_action_type == "commit":
+            target = ""
+        return {
+            "action_type": stage.expected_action_type,
+            "category": category,
+            "target": target,
+            "medication": medication,
+            "message": stage.rationale,
+            "scenario_type": scenario_type,
+            "phase_name": stage.phase_name,
+        }
+
     def _build_task_graph(
         self,
         snapshot: EpisodeSnapshot,
@@ -668,13 +868,21 @@ class MIMICCouncilSimulator:
         stage: CouncilStage,
         action: Dict[str, Any],
     ) -> Dict[str, Any]:
-        context = self.web_augmenter.augment(
+        next_stage = snapshot.stages[min(snapshot.step_count + 1, len(snapshot.stages) - 1)]
+        context = self.llm_search_augmenter.augment(
             mission_brief=snapshot.mission_brief,
             scenario_type=snapshot.scenario_type,
             phase_name=stage.phase_name,
             stage_rationale=stage.rationale,
             action=action,
+            patient_snapshot=snapshot.patient_snapshot,
+            expected_action=self._expected_action_payload(stage, snapshot.scenario_type, snapshot.patient_snapshot),
             trajectory_archive=self.trajectory_archive,
+        )
+        context["next_expected_action"] = self._expected_action_payload(
+            next_stage,
+            snapshot.scenario_type,
+            snapshot.patient_snapshot,
         )
         context["generated_at_ms"] = timestamp_ms()
         return context
@@ -715,6 +923,7 @@ class MIMICCouncilSimulator:
 
     def evaluate_step(self, snapshot: EpisodeSnapshot, action: Dict[str, Any]) -> StepEvaluation:
         stage = snapshot.stages[min(snapshot.step_count, len(snapshot.stages) - 1)]
+        next_stage = snapshot.stages[min(snapshot.step_count + 1, len(snapshot.stages) - 1)]
         action_type = str(action.get("action_type", "")).strip()
         target = str(action.get("target") or "").strip()
         category = str(action.get("category") or "").strip()
@@ -838,11 +1047,33 @@ class MIMICCouncilSimulator:
             retrieved_analogies = self._retrieve_analogies(snapshot, action_signature)
             if retrieved_analogies:
                 stakeholder_updates.append("Memory: Similar prior episodes suggest the council is drifting off the strong path.")
+        context_observation = self.context_manager.build_observation(
+            action=action,
+            expected_action=self._expected_action_payload(stage, snapshot.scenario_type, snapshot.patient_snapshot),
+            next_expected_action=self._expected_action_payload(
+                next_stage,
+                snapshot.scenario_type,
+                snapshot.patient_snapshot,
+            ),
+            retrieved_trajectories=web_augmentation.get("trajectory_alignments", []),
+            llm_search=web_augmentation,
+            task_graph=task_graph,
+            task_graph_loss=task_graph_loss,
+            milestone_score=milestone_score,
+            safety_score=safety_score,
+            coalition_score=coalition_score,
+            patient_snapshot=snapshot.patient_snapshot,
+        )
         if web_augmentation.get("valid_use_cases"):
             top_case = web_augmentation["valid_use_cases"][0]
             stakeholder_updates.append(
-                f"External evidence: {top_case.get('case', 'current action')} support={top_case.get('support', 0.0)}."
+                f"LLM search: {top_case.get('case', 'current action')} support={top_case.get('support', 0.0)}."
             )
+        stakeholder_updates.append(
+            "Guidance: "
+            f"{context_observation.get('next_step_guidance', 'retain')} -> "
+            f"{context_observation.get('correction_signal', {}).get('rationale', '')}"
+        )
 
         archive_summary = (
             f"{snapshot.scenario_type} step {snapshot.step_count}: expected {stage.expected_action_type}/"
@@ -856,6 +1087,7 @@ class MIMICCouncilSimulator:
                 "category": category,
                 "summary": archive_summary,
                 "task_graph_loss": round(task_graph_loss, 4),
+                "semantic_overlap": context_observation.get("confidence", 0.0),
             }
         )
 
@@ -869,6 +1101,7 @@ class MIMICCouncilSimulator:
             task_graph_loss=task_graph_loss,
             task_graph=task_graph,
             web_augmentation=web_augmentation,
+            context_observation=context_observation,
             done=done,
             outcome_text=outcome_text,
             stakeholder_updates=stakeholder_updates,
@@ -883,6 +1116,7 @@ class MIMICCouncilSimulator:
         snapshot.retrieved_analogies = evaluation.retrieved_analogies
         snapshot.web_augmentation = evaluation.web_augmentation
         snapshot.task_graph = evaluation.task_graph
+        snapshot.context_observation = evaluation.context_observation
         snapshot.message_log.extend(evaluation.stakeholder_updates)
         return {
             "evaluation": evaluation,
@@ -895,6 +1129,7 @@ class MIMICCouncilSimulator:
                 "task_graph": round(evaluation.task_graph_score, 4),
                 "task_graph_loss": round(evaluation.task_graph_loss, 4),
                 "web_evidence_count": float(evaluation.web_augmentation.get("evidence_count", 0)),
+                "context_confidence": float(evaluation.context_observation.get("confidence", 0.0)),
                 "progress": round(snapshot.step_count / max(1, self.max_steps), 4),
             },
         }
@@ -919,5 +1154,6 @@ class MIMICCouncilSimulator:
             "hidden_targets": [asdict(stage) for stage in snapshot.stages],
             "task_graph": snapshot.task_graph,
             "web_augmentation": snapshot.web_augmentation,
+            "context_observation": snapshot.context_observation,
             "archived_trajectory_size": len(self.trajectory_archive),
         }
