@@ -1,0 +1,18 @@
+# Python environment and caches
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local credentials
+cookies.txt
+
+# Downloaded datasets and temporary download state
+physionet.org/
+*.csv
+*.csv.gz
+*.aria2
+*.aria2__temp
+
+# Local helper lists
+icu_files.txt
+hosp_links_2.txt
