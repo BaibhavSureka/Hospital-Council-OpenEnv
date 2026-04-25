@@ -1,6 +1,6 @@
 # Hospital Council OpenEnv
 
-This repo now centers on `hospital_council_env/`, a real OpenEnv package built for the Meta x Hugging Face OpenEnv Hackathon rather than a one-off single-agent demo.
+This repo centers on `hospital_council_env/`, a real OpenEnv package built for the Meta x Hugging Face OpenEnv Hackathon rather than a one-off single-agent demo.
 
 The core idea is stronger than the earlier baseline: the model is not just predicting a label, it is acting as a hospital council coordinator across a long-horizon, partially observed episode. It has to manage conflicting incentives from an attending physician, triage nurse, pharmacist, bed manager, and family liaison while steering a MIMIC-seeded patient case toward a safe outcome.
 
@@ -193,15 +193,23 @@ If you want the full local test flow in the simplest order:
 
 ## Submission Checklist
 
-Before final hackathon submission, fill these in:
+Manual items still required before final submission:
 
-- Hugging Face Space URL: `TODO`
-- Hugging Face mini-blog URL: `TODO`
-- Short demo video URL: `TODO`
-- Reward curve image path or WandB link: `TODO`
-- Before/after rollout examples: `TODO`
+- Hugging Face Space URL: REQUIRED
+- Hugging Face mini-blog URL (or equivalent short writeup): REQUIRED
+- Short demo video URL (< 2 minutes): REQUIRED
+- Reward curve image path or WandB link from a real training run: REQUIRED
+- Trained vs untrained rollout comparison link: REQUIRED
+
+Verified local evidence already in repo:
+
+- Baseline metrics JSON: [docs/evidence/metrics_baseline.json](docs/evidence/metrics_baseline.json)
+- Random metrics JSON: [docs/evidence/metrics_random.json](docs/evidence/metrics_random.json)
+- Metrics comparison summary: [docs/evidence/reward_comparison.md](docs/evidence/reward_comparison.md)
+- Verified demo rollout: [docs/evidence/demo_rollout_verified.jsonl](docs/evidence/demo_rollout_verified.jsonl)
 
 Use [docs/demo_video_script.md](docs/demo_video_script.md) as the recording outline.
+Use [docs/requirement_audit_2026-04-25.md](docs/requirement_audit_2026-04-25.md) for the latest compliance audit.
 
 ## Validation Notes
 

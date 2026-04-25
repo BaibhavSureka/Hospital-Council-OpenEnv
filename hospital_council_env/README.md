@@ -152,10 +152,20 @@ This follows the official `environment_factory` pattern from TRL’s OpenEnv int
 
 ## Submission Assets
 
-Fill these before final submission:
+Manual links still required before final submission:
 
-- HF Space URL: `TODO`
-- Blog post URL: `TODO`
-- 2-minute video URL: `TODO`
-- Reward curve artifact: `TODO`
-- Demo recording JSONL: `TODO`
+- HF Space URL: REQUIRED
+- Blog post URL: REQUIRED
+- 2-minute video URL: REQUIRED
+- Reward curve artifact from a real training run: REQUIRED
+
+Local evidence currently available:
+
+- Baseline metrics JSON: [../docs/evidence/metrics_baseline.json](../docs/evidence/metrics_baseline.json)
+- Random metrics JSON: [../docs/evidence/metrics_random.json](../docs/evidence/metrics_random.json)
+- Comparison summary: [../docs/evidence/reward_comparison.md](../docs/evidence/reward_comparison.md)
+- Verified rollout JSONL: [../docs/evidence/demo_rollout_verified.jsonl](../docs/evidence/demo_rollout_verified.jsonl)
+
+Full compliance audit:
+
+- [../docs/requirement_audit_2026-04-25.md](../docs/requirement_audit_2026-04-25.md)
