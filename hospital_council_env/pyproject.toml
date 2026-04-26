@@ -26,8 +26,11 @@ dev = [
 train = [
     "datasets>=2.21.0",
     "trl>=0.19.0",
-    "transformers>=4.55.0",
+    "transformers @ git+https://github.com/huggingface/transformers.git@main",
     "accelerate>=0.34.0",
+    "matplotlib>=3.8.0",
+    "packaging>=24.0",
+    "jmespath>=1.0.1",
 ]
 
 [project.scripts]
@@ -35,6 +38,7 @@ server = "hospital_council_env.server.app:main"
 hospital-council-demo = "hospital_council_env.training.run_local_demo:main"
 hospital-council-eval = "hospital_council_env.training.evaluate_policy:main"
 hospital-council-remote-eval = "hospital_council_env.training.evaluate_remote_client:main"
+hospital-council-plot-training = "hospital_council_env.training.plot_training_run:main"
 
 [tool.setuptools]
 include-package-data = true

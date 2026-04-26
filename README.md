@@ -1,15 +1,35 @@
+---
+title: Hospital Council OpenEnv
+sdk: docker
+app_port: 8000
+---
+
 # Hospital Council OpenEnv
 
-Hospital Council OpenEnv is a long-horizon, multi-agent environment for the Meta x Hugging Face OpenEnv Hackathon. The agent acts as a hospital council coordinator and has to manage partially observed patient state, stakeholder incentives, coalition drift, and late-stage execution pressure across a multi-step episode.
+Hospital Council OpenEnv is a long-horizon, multi-agent environment for the Meta x Hugging Face OpenEnv India Hackathon 2026. The agent plays the role of a hospital council coordinator and must manage partial information, stakeholder incentives, coalition drift, and late execution pressure across a multi-step episode.
 
-The main submission lives in `hospital_council_env/`. The older `mimic_openenv.py` file is only a legacy baseline reference and is not the environment that should be deployed or judged.
+The hackathon submission environment lives in `hospital_council_env/`. The older `mimic_openenv.py` file is only a legacy baseline reference and is not the artifact that should be deployed or judged.
 
-## Why this fits the hackathon
+## Submission Links
 
-- **Theme 1: Multi-Agent Interactions**. The agent negotiates across an attending physician, triage nurse, pharmacist, bed manager, and family liaison.
-- **Theme 2: Long-Horizon Planning**. Episodes have phased structure, delayed credit, and failure modes that appear only after several steps.
-- **Theme 3.1: Professional World Modeling**. The environment models changing clinical and operational state, not a static puzzle or label task.
-- **Judging fit**. The environment uses dense OpenEnv rubric scores, has a minimal TRL training entrypoint, and exposes enough structure to show measurable reward improvement.
+Replace the three placeholders below with your final public URLs before submitting the Google Form:
+
+- Hugging Face Space: `REPLACE_WITH_PUBLIC_SPACE_URL`
+- Public training notebook: `REPLACE_WITH_PUBLIC_NOTEBOOK_URL`
+- Public blog post: `REPLACE_WITH_PUBLIC_BLOG_URL`
+
+Recommended final URLs:
+
+- Space: `https://huggingface.co/spaces/<user-or-org>/<space-name>`
+- Notebook in repo: `https://huggingface.co/spaces/<user-or-org>/<space-name>/blob/main/Hospital_Council_OpenEnv_Colab_Training.ipynb`
+- Blog in repo: `https://huggingface.co/spaces/<user-or-org>/<space-name>/blob/main/Blog.md`
+
+## Why This Fits The Hackathon
+
+- Multi-agent interaction: the agent negotiates across an attending physician, triage nurse, pharmacist, bed manager, and family liaison.
+- Long-horizon planning: episodes have phased structure, delayed credit, and failure modes that appear only after several steps.
+- Professional world modeling: the environment models changing clinical and operational state rather than a static puzzle.
+- RL training fit: the environment exposes dense OpenEnv rubric scores and a minimal Hugging Face TRL GRPO entrypoint.
 
 ## Environment Summary
 
@@ -50,34 +70,40 @@ Rewards are composed with OpenEnv rubrics:
 - `terminal`
 - `task_graph`
 
-## Data and Deployment Mode
+## Data Mode
 
-The environment is designed to use licensed MIMIC-IV tables when `MIMIC_DATA_ROOT` is available. For Hugging Face Spaces and other public demos where private MIMIC files cannot be bundled, it now falls back automatically to a synthetic bootstrap encounter set that preserves the same action space, reward flow, and scenario families.
+When `MIMIC_DATA_ROOT` is available, local research runs can use licensed MIMIC-IV-derived data. In public deployments such as Hugging Face Spaces, the environment automatically falls back to a synthetic bootstrap encounter set with the same action space, reward flow, and scenario families.
 
-That means:
+That gives us:
 
-- local research runs can use real MIMIC-derived seeds
-- the public Space can still boot and run without private data
-- judges can interact with the environment immediately after deployment
+- local runs that can use licensed clinical data
+- a public Space that can boot without private files
+- a judge-friendly environment that is immediately runnable after deployment
 
-The active data source is exposed in the observation under `patient_snapshot.data_source`.
+The active source is surfaced in `patient_snapshot.data_source`.
 
-## Hugging Face Deployment
+## Hugging Face Space Deployment
 
-This repo is now deployable from the repo root as a Docker Space.
+This repo is set up to be pushed directly as a Docker Space from the repo root.
 
-Files that matter for Space deployment:
+Files that matter most:
 
-- `README.md`: Hugging Face Space metadata and project overview
-- `Dockerfile`: root Docker build for the Space
-- `hospital_council_env/openenv.yaml`: OpenEnv manifest
-- `hospital_council_env/server/app.py`: FastAPI entrypoint
+- `README.md`
+- `Dockerfile`
+- `hospital_council_env/openenv.yaml`
+- `hospital_council_env/server/app.py`
 
-If you want the Space to use real MIMIC data instead of synthetic bootstrap mode, add a Space secret or runtime variable named `MIMIC_DATA_ROOT` and mount the licensed dataset in that path. Otherwise the Space will run in synthetic mode automatically.
+Useful endpoints after deployment:
+
+- `/` redirects to the OpenEnv UI
+- `/status`
+- `/health`
+
+If you want the Space to use licensed MIMIC data instead of synthetic mode, configure `MIMIC_DATA_ROOT` as a Space runtime variable or secret and mount the dataset there. Otherwise the public Space works in synthetic mode automatically.
 
 ## Local Validation
 
-Use the repo venv:
+Use the repo virtual environment:
 
 ```bash
 .\.venv\Scripts\openenv.exe validate hospital_council_env -v
@@ -92,7 +118,7 @@ Set-Location hospital_council_env
 ..\.venv\Scripts\python.exe -m hospital_council_env.server.app
 ```
 
-Then check the real client-server loop:
+Then validate the real client-server loop:
 
 ```bash
 .\.venv\Scripts\python.exe -m hospital_council_env.training.evaluate_remote_client --base-url http://localhost:8000 --episodes 5
@@ -100,41 +126,62 @@ Then check the real client-server loop:
 
 ## Training
 
-Minimal TRL entrypoint:
+Minimal Hugging Face TRL GRPO entrypoint:
 
 ```bash
+$env:PYTHONUTF8='1'
 .\.venv\Scripts\python.exe -m hospital_council_env.training.hf_trl_grpo_minimal --model Qwen/Qwen3-0.6B
 ```
 
-This follows the official `environment_factory` pattern from the Hugging Face TRL OpenEnv docs.
+The Windows UTF-8 environment variable is important because the current TRL plus `transformers` tool-calling stack reads template files that otherwise break under the default Windows codepage.
+
+To generate compact training evidence artifacts after a run:
+
+```bash
+.\.venv\Scripts\python.exe -m hospital_council_env.training.plot_training_run --output-dir outputs/grpo_hospital_council --artifacts-dir docs/evidence/training_run
+```
+
+Expected evidence outputs:
+
+- `docs/evidence/training_run/grpo_training_curves.png`
+- `docs/evidence/training_run/training_run_summary.json`
+- `docs/evidence/training_run/training_run_summary.md`
 
 ## Evidence
 
-Local evidence tracked in the repo:
+Current repo evidence:
 
 - Project write-up: [Blog.md](Blog.md)
-- Colab notebook: [Hospital_Council_OpenEnv_Colab_Training.ipynb](Hospital_Council_OpenEnv_Colab_Training.ipynb)
-- Baseline metrics JSON: [docs/evidence/metrics_baseline.json](docs/evidence/metrics_baseline.json)
-- Random metrics JSON: [docs/evidence/metrics_random.json](docs/evidence/metrics_random.json)
-- Comparison summary: [docs/evidence/reward_comparison.md](docs/evidence/reward_comparison.md)
+- Training notebook: [Hospital_Council_OpenEnv_Colab_Training.ipynb](Hospital_Council_OpenEnv_Colab_Training.ipynb)
+- Baseline metrics: [docs/evidence/metrics_baseline.json](docs/evidence/metrics_baseline.json)
+- Random metrics: [docs/evidence/metrics_random.json](docs/evidence/metrics_random.json)
+- Reward comparison: [docs/evidence/reward_comparison.md](docs/evidence/reward_comparison.md)
 - Verified demo rollout: [docs/evidence/demo_rollout_verified.jsonl](docs/evidence/demo_rollout_verified.jsonl)
 - Demo script: [docs/demo_video_script.md](docs/demo_video_script.md)
-- Compliance audit: [docs/requirement_audit_2026-04-25.md](docs/requirement_audit_2026-04-25.md)
+- Submission audit: [docs/requirement_audit_2026-04-25.md](docs/requirement_audit_2026-04-25.md)
+- Form answer template: [docs/submission_form_answers.md](docs/submission_form_answers.md)
 
-## Final Submission TODOs
+The only missing evidence artifact in-git is the final GRPO reward/loss plot export from a completed training run. The plotting pipeline is now included in the repo, and the generated files should be committed under `docs/evidence/training_run/` once the run finishes.
 
-These are still manual because they depend on your published assets:
+## Submission Checklist
 
-- add the final Hugging Face Space URL
-- add the mini-blog URL or short demo video URL
-- add reward/loss plots from a real training run
-- add trained-vs-untrained rollout evidence once that run is complete
+- OpenEnv-based environment included in `hospital_council_env/`
+- Working RL training script in `hospital_council_env/training/hf_trl_grpo_minimal.py`
+- Public re-runnable notebook in `Hospital_Council_OpenEnv_Colab_Training.ipynb`
+- Public blog option prepared in `Blog.md`
+- Docker Space deployment path included at repo root
+- README contains the three submission URL placeholders and supporting artifact links
+- Real reward/loss plots can be generated with `plot_training_run.py` after the GRPO run completes
 
-## Space Endpoints
+## Final Manual Steps
 
-- App root: `/` redirects to the OpenEnv UI
-- Status check: `/status`
-- Health check: `/health`
+Only three external publication steps remain before form submission:
+
+1. Push this repo to a public Hugging Face Space and replace `REPLACE_WITH_PUBLIC_SPACE_URL`.
+2. Confirm the notebook URL is public and replace `REPLACE_WITH_PUBLIC_NOTEBOOK_URL`.
+3. Publish the repo with `Blog.md` visible in the Space repo and replace `REPLACE_WITH_PUBLIC_BLOG_URL`.
+
+After those URLs are filled in, submit the same three public links in the Google Form.
 
 ## References
 

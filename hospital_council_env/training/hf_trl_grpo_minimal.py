@@ -11,7 +11,10 @@ import os
 from typing import Optional
 
 from datasets import Dataset
+from packaging.version import Version
+import torch
 from trl import GRPOConfig, GRPOTrainer
+from transformers import AutoModelForCausalLM, AutoTokenizer, __version__ as transformers_version
 
 from hospital_council_env import HospitalCouncilAction, HospitalCouncilEnv
 
@@ -169,23 +172,62 @@ def build_dataset(size: int = 256) -> Dataset:
     return Dataset.from_dict({"prompt": [[{"role": "user", "content": prompt}]] * size})
 
 
+def ensure_environment_factory_support() -> None:
+    minimum_version = Version("5.2.0")
+    current_version = Version(transformers_version)
+    if current_version < minimum_version:
+        raise ImportError(
+            "TRL environment_factory requires transformers>=5.2.0. "
+            f"Found transformers=={transformers_version}. "
+            "Install the Hugging Face main branch first with "
+            '`pip install "transformers @ git+https://github.com/huggingface/transformers.git@main"`.'
+        )
+
+
+def load_policy_model_and_tokenizer(model_name: str):
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        device_map=None,
+        low_cpu_mem_usage=False,
+        dtype=torch.float32,
+    )
+    tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    return model, tokenizer
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Minimal GRPO trainer for Hospital Council")
     parser.add_argument("--model", default="Qwen/Qwen3-0.6B")
     parser.add_argument("--output-dir", default="outputs/grpo_hospital_council")
     parser.add_argument("--dataset-size", type=int, default=256)
+    parser.add_argument("--max-steps", type=int, default=-1)
+    parser.add_argument("--num-generations", type=int, default=4)
+    parser.add_argument("--max-completion-length", type=int, default=2048)
     args = parser.parse_args()
+    os.environ.setdefault("TRL_EXPERIMENTAL_SILENCE", "1")
+    ensure_environment_factory_support()
+    use_cpu = not torch.cuda.is_available()
+    batch_size = max(2, args.num_generations)
+    model, tokenizer = load_policy_model_and_tokenizer(args.model)
 
     trainer = GRPOTrainer(
-        model=args.model,
+        model=model,
         train_dataset=build_dataset(args.dataset_size),
         reward_funcs=reward_func,
+        processing_class=tokenizer,
         args=GRPOConfig(
             output_dir=args.output_dir,
-            max_completion_length=2048,
-            num_generations=4,
+            max_completion_length=args.max_completion_length,
+            num_generations=args.num_generations,
             log_completions=True,
             chat_template_kwargs={"enable_thinking": False},
+            max_steps=args.max_steps,
+            use_cpu=use_cpu,
+            bf16=not use_cpu,
+            fp16=False,
+            per_device_train_batch_size=batch_size,
         ),
         environment_factory=HospitalCouncilToolEnv,
     )
