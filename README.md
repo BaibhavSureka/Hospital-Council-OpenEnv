@@ -129,6 +129,7 @@ This follows the official `environment_factory` pattern from the Hugging Face TR
 Local evidence tracked in the repo:
 
 - Project write-up: [Blog.md](Blog.md)
+- Colab notebook: [Hospital_Council_OpenEnv_Colab_Training.ipynb](Hospital_Council_OpenEnv_Colab_Training.ipynb)
 - Baseline metrics JSON: [docs/evidence/metrics_baseline.json](docs/evidence/metrics_baseline.json)
 - Random metrics JSON: [docs/evidence/metrics_random.json](docs/evidence/metrics_random.json)
 - Comparison summary: [docs/evidence/reward_comparison.md](docs/evidence/reward_comparison.md)

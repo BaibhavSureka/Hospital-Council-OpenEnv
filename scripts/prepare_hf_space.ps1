@@ -16,6 +16,7 @@ New-Item -ItemType Directory -Path (Join-Path $stagePath "hospital_council_env")
 
 Copy-Item -LiteralPath (Join-Path $root "README.md") -Destination $stagePath
 Copy-Item -LiteralPath (Join-Path $root "Blog.md") -Destination $stagePath
+Copy-Item -LiteralPath (Join-Path $root "Hospital_Council_OpenEnv_Colab_Training.ipynb") -Destination $stagePath
 Copy-Item -LiteralPath (Join-Path $root "Dockerfile") -Destination $stagePath
 Copy-Item -LiteralPath (Join-Path $root "run_openenv_demo.py") -Destination $stagePath
 Copy-Item -LiteralPath (Join-Path $root ".gitignore") -Destination $stagePath
