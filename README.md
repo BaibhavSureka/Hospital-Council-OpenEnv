@@ -1,14 +1,11 @@
----
-title: Hospital Council OpenEnv
-sdk: docker
-app_port: 8000
----
-
 # Hospital Council OpenEnv
 
-Hospital Council OpenEnv is a long-horizon, multi-agent environment for the Meta x Hugging Face OpenEnv India Hackathon 2026. The agent plays the role of a hospital council coordinator and must manage partial information, stakeholder incentives, coalition drift, and late execution pressure across a multi-step episode.
+Hospital Council OpenEnv is a long-horizon, multi-agent environment. The agent plays the role of a hospital council coordinator and must manage partial information, stakeholder incentives, coalition drift, and late execution pressure across a multi-step episode.
 
-The hackathon submission environment lives in `hospital_council_env/`. The older `mimic_openenv.py` file is only a legacy baseline reference and is not the artifact that should be deployed or judged.
+<img width="4763" height="3597" alt="image" src="https://github.com/user-attachments/assets/158c1f72-c1f2-46f4-b5e5-beef126d8b0e" />
+
+
+The environment lives in `hospital_council_env/`. The older `mimic_openenv.py` file is only a legacy baseline reference and is not the artifact that should be deployed or judged.
 
 ## Submission Links
 
@@ -167,16 +164,6 @@ The only missing evidence artifact in-git is the final GRPO reward/loss plot exp
 - Docker Space deployment path included at repo root
 - README contains the three submission URL placeholders and supporting artifact links
 - Real reward/loss plots can be generated with `plot_training_run.py` after the GRPO run completes
-
-## Final Manual Steps
-
-Only three external publication steps remain before form submission:
-
-1. Confirm the Space opens publicly at `https://huggingface.co/spaces/BAIBHAV1234/hospital-council-openenv`.
-2. Confirm the notebook file is visible publicly at `https://huggingface.co/spaces/BAIBHAV1234/hospital-council-openenv/blob/main/Hospital_Council_OpenEnv_Colab_Training.ipynb`.
-3. Confirm `Blog.md` is visible publicly at `https://huggingface.co/spaces/BAIBHAV1234/hospital-council-openenv/blob/main/Blog.md`.
-
-After those links are public, submit the same three URLs in the Google Form.
 
 ## References
 
