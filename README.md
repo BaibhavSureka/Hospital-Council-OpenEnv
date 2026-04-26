@@ -128,6 +128,7 @@ This follows the official `environment_factory` pattern from the Hugging Face TR
 
 Local evidence tracked in the repo:
 
+- Project write-up: [Blog.md](Blog.md)
 - Baseline metrics JSON: [docs/evidence/metrics_baseline.json](docs/evidence/metrics_baseline.json)
 - Random metrics JSON: [docs/evidence/metrics_random.json](docs/evidence/metrics_random.json)
 - Comparison summary: [docs/evidence/reward_comparison.md](docs/evidence/reward_comparison.md)
@@ -143,6 +144,12 @@ These are still manual because they depend on your published assets:
 - add the mini-blog URL or short demo video URL
 - add reward/loss plots from a real training run
 - add trained-vs-untrained rollout evidence once that run is complete
+
+## Space Endpoints
+
+- App root: `/` redirects to the OpenEnv UI
+- Status check: `/status`
+- Health check: `/health`
 
 ## References
 

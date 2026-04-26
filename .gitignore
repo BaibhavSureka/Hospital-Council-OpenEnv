@@ -1,10 +1,17 @@
 # Python environment and caches
 .venv/
+.hf_space_stage/
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+*.log
+.cache/
 
 # Local credentials
 cookies.txt
+.env
+.env.*
 
 # Downloaded datasets and temporary download state
 physionet.org/
@@ -30,3 +37,13 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+hospital_council_env/build/
+hospital_council_env/*.egg-info/
+hospital_council_env/__pycache__/
+hospital_council_env/server/__pycache__/
+hospital_council_env/training/__pycache__/
+
+# Other large local folders
+node_modules/
+*.sqlite3
+*.exe

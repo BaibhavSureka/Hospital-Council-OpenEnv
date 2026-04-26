@@ -8,6 +8,8 @@
 
 import os
 
+from fastapi.responses import RedirectResponse
+
 try:
     from openenv.core.env_server.http_server import create_app
 except Exception as e:  # pragma: no cover
@@ -18,7 +20,7 @@ except Exception as e:  # pragma: no cover
 try:
     from ..models import HospitalCouncilAction, HospitalCouncilObservation
     from .hospital_council_env_environment import HospitalCouncilEnvironment
-except ModuleNotFoundError:
+except ImportError:
     from models import HospitalCouncilAction, HospitalCouncilObservation
     from server.hospital_council_env_environment import HospitalCouncilEnvironment
 
@@ -31,6 +33,22 @@ app = create_app(
     env_name="hospital_council_env",
     max_concurrent_envs=4,
 )
+
+
+@app.get("/", include_in_schema=False)
+def root_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/web", status_code=307)
+
+
+@app.get("/status", include_in_schema=False)
+def status() -> dict[str, object]:
+    return {
+        "status": "ok",
+        "service": "hospital-council-openenv",
+        "ui": "/web",
+        "api_health": "/health",
+        "mode": "openenv-fastapi",
+    }
 
 
 def main() -> None:
