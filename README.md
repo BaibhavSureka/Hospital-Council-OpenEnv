@@ -1,19 +1,3 @@
----
-title: Hospital Council OpenEnv
-emoji: "🏥"
-colorFrom: blue
-colorTo: green
-sdk: docker
-pinned: false
-app_port: 8000
-base_path: /web
-tags:
-  - openenv
-  - healthcare
-  - multi-agent
-  - long-horizon
----
-
 # Hospital Council OpenEnv
 
 Hospital Council OpenEnv is a long-horizon, multi-agent environment for the Meta x Hugging Face OpenEnv Hackathon. The agent acts as a hospital council coordinator and has to manage partially observed patient state, stakeholder incentives, coalition drift, and late-stage execution pressure across a multi-step episode.
