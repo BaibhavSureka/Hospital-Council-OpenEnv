@@ -2389,7 +2389,7 @@ train = [
 requires-dist = [
     { name = "accelerate", marker = "extra == 'train'", specifier = ">=0.34.0" },
     { name = "datasets", marker = "extra == 'train'", specifier = ">=2.21.0" },
-    { name = "openenv-core", extras = ["core"], specifier = ">=0.2.3" },
+    { name = "openenv-core", extras = ["core"], specifier = "==0.2.3" },
     { name = "pandas", specifier = ">=2.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },

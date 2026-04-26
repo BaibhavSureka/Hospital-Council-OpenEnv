@@ -1,0 +1,36 @@
+{
+  "episodes": 20,
+  "avg_reward": 4.3860325,
+  "success_rate": 0.75,
+  "phase_action_accuracy": 1.0,
+  "category_accuracy": 1.0,
+  "milestone_hit_rate": 0.8761904761904762,
+  "coalition_threshold_rate": 0.42857142857142855,
+  "avg_task_graph_loss": 0.03418095238095238,
+  "web_augmented_step_rate": 1.0,
+  "avg_context_confidence": 0.47084761904761907,
+  "guided_replace_rate": 0.0,
+  "total_steps": 105,
+  "scenario_breakdown": {
+    "diagnostic_ambiguity": {
+      "episodes": 5,
+      "avg_reward": 5.004346,
+      "success_rate": 1.0
+    },
+    "medication_alignment": {
+      "episodes": 5,
+      "avg_reward": 4.985035,
+      "success_rate": 1.0
+    },
+    "conservative_monitoring": {
+      "episodes": 5,
+      "avg_reward": 5.069197,
+      "success_rate": 1.0
+    },
+    "discharge_negotiation": {
+      "episodes": 5,
+      "avg_reward": 2.4855519999999998,
+      "success_rate": 0.0
+    }
+  }
+}

@@ -14,7 +14,7 @@ version = "0.2.0"
 description = "Long-horizon multi-agent hospital council environment for OpenEnv"
 requires-python = ">=3.10"
 dependencies = [
-    "openenv-core[core]>=0.2.3",
+    "openenv-core[core]==0.2.3",
     "pandas>=2.0.0",
 ]
 

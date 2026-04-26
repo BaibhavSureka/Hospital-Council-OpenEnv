@@ -1,51 +1,42 @@
+---
+title: Hospital Council OpenEnv
+emoji: "🏥"
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+app_port: 8000
+base_path: /web
+tags:
+  - openenv
+  - healthcare
+  - multi-agent
+  - long-horizon
+---
+
 # Hospital Council OpenEnv
 
-This repo centers on `hospital_council_env/`, a real OpenEnv package built for the Meta x Hugging Face OpenEnv Hackathon rather than a one-off single-agent demo.
+Hospital Council OpenEnv is a long-horizon, multi-agent environment for the Meta x Hugging Face OpenEnv Hackathon. The agent acts as a hospital council coordinator and has to manage partially observed patient state, stakeholder incentives, coalition drift, and late-stage execution pressure across a multi-step episode.
 
-The core idea is stronger than the earlier baseline: the model is not just predicting a label, it is acting as a hospital council coordinator across a long-horizon, partially observed episode. It has to manage conflicting incentives from an attending physician, triage nurse, pharmacist, bed manager, and family liaison while steering a MIMIC-seeded patient case toward a safe outcome.
+The main submission lives in `hospital_council_env/`. The older `mimic_openenv.py` file is only a legacy baseline reference and is not the environment that should be deployed or judged.
 
-## Why this fits the judging criteria
+## Why this fits the hackathon
 
-- **Environment Innovation**: this is a multi-agent hospital operations world, not a grid clone or a simple classifier loop.
-- **Storytelling**: every episode has a clear narrative arc: sensemaking, alignment, execution, conflict resolution, handoff.
-- **Improvement in Rewards**: the environment exposes dense rubric scores plus a terminal success component, so reward curves and before/after rollouts are easy to show.
-- **Reward & Training Pipeline**: the reward is rubric-composed, scenario-balanced, and paired with a minimal TRL training script.
-
-## Themes Covered
-
-- **Theme 1: Multi-Agent Interactions**
-  The coordinator negotiates with multiple stakeholders whose incentives diverge.
-- **Theme 2: Long-Horizon Planning**
-  Episodes unfold across several phases with delayed terminal credit.
-- **Theme 3: World Modeling**
-  The hidden patient trajectory depends on actions, coalition support, and safety constraints.
-- **Theme 4: Dynamic Monitoring**
-  The environment exposes an active task graph and monitoring loss so rollouts show whether each action is reducing phase-level planning error.
-- **Theme 5: External Knowledge**
-  A self-contained LLM-style search module generates pseudo-documents, ranks them, and maps them onto prior trajectories without relying on external APIs.
-
-## What Changed
-
-- `hospital_council_env/`: new official OpenEnv package scaffold and implementation.
-- `hospital_council_env/server/hospital_council_env_environment.py`: OpenEnv server environment.
-- `hospital_council_env/simulator.py`: MIMIC-derived scenario sampler, long-horizon phase plan, stakeholder dynamics, historical retrieval.
-- `hospital_council_env/augmentation.py`: LLM-style pseudo-search generation plus a Context LLM Manager for corrective feedback.
-- `hospital_council_env/rubrics.py`: composable reward logic using OpenEnv rubrics.
-- `hospital_council_env/training/hf_trl_grpo_minimal.py`: minimal Hugging Face TRL script.
-- `run_openenv_demo.py`: top-level local demo entrypoint for the new environment.
-
-`mimic_openenv.py` is kept as the earlier baseline simulator and reference point, but it is no longer the main submission shape.
+- **Theme 1: Multi-Agent Interactions**. The agent negotiates across an attending physician, triage nurse, pharmacist, bed manager, and family liaison.
+- **Theme 2: Long-Horizon Planning**. Episodes have phased structure, delayed credit, and failure modes that appear only after several steps.
+- **Theme 3.1: Professional World Modeling**. The environment models changing clinical and operational state, not a static puzzle or label task.
+- **Judging fit**. The environment uses dense OpenEnv rubric scores, has a minimal TRL training entrypoint, and exposes enough structure to show measurable reward improvement.
 
 ## Environment Summary
 
-Each episode samples a MIMIC-derived encounter and maps it into one of four balanced scenario families:
+Each episode is assigned to one of four scenario families:
 
 - `diagnostic_ambiguity`
 - `medication_alignment`
 - `conservative_monitoring`
 - `discharge_negotiation`
 
-The agent acts through structured moves:
+The agent acts through five structured moves:
 
 - `consult`
 - `propose`
@@ -53,119 +44,71 @@ The agent acts through structured moves:
 - `resolve`
 - `commit`
 
-The observation is only partially observed and includes:
+Observations include:
 
 - mission brief
-- visible patient snapshot
+- patient snapshot
 - stakeholder updates
 - visible conflicts
-- retrieved analogies from historical failures
-- task-graph monitoring loss
-- LLM-search augmentation signals
-- Context LLM Manager feedback
+- retrieved analogies
+- task-graph state and loss
+- `web_augmentation`
+- `context_observation`
 - long-horizon goals
 - scoreboard metrics
 
-The hidden state tracks:
+Rewards are composed with OpenEnv rubrics:
 
-- per-step milestone targets
-- stakeholder alignment
-- diagnostic clarity
-- medication progress
-- discharge readiness
-- `labevents`-derived lab burden and salient lab cues
+- `milestone`
+- `coalition`
+- `safety`
+- `efficiency`
+- `terminal`
+- `task_graph`
 
-## Reward Design
+## Data and Deployment Mode
 
-The environment uses OpenEnv rubrics, not one monolithic score.
+The environment is designed to use licensed MIMIC-IV tables when `MIMIC_DATA_ROOT` is available. For Hugging Face Spaces and other public demos where private MIMIC files cannot be bundled, it now falls back automatically to a synthetic bootstrap encounter set that preserves the same action space, reward flow, and scenario families.
 
-Subscores:
+That means:
 
-- `milestone`: did the action fit the current long-horizon phase?
-- `coalition`: are stakeholders aligning or drifting apart?
-- `safety`: did the agent avoid risky premature actions?
-- `efficiency`: is it making progress without redundant loops?
-- `terminal`: did the episode land in a strong final state?
-- `task_graph`: did the action reduce the active task-graph monitoring loss?
+- local research runs can use real MIMIC-derived seeds
+- the public Space can still boot and run without private data
+- judges can interact with the environment immediately after deployment
 
-These are combined in `HospitalCouncilRubric` with a weighted sum.
+The active data source is exposed in the observation under `patient_snapshot.data_source`.
 
-## Dynamic Augmentation
+## Hugging Face Deployment
 
-Every step now appends two signals to the structured observation:
+This repo is now deployable from the repo root as a Docker Space.
 
-- `task_graph`: active phase node, expected action/category/targets, and `task_graph_loss`.
-- `web_augmentation`: simulated LLM search results, ranked pseudo-documents, consistency checks, and trajectory overlaps.
-- `context_observation`: classification, probabilities, confidence, correction signal, and next-step guidance.
+Files that matter for Space deployment:
 
-This retrieval path is fully self-contained. The environment constructs prompt-like search tasks, generates multiple pseudo-results, ranks them for relevance, and feeds the resulting structure into the reasoning loop.
+- `README.md`: Hugging Face Space metadata and project overview
+- `Dockerfile`: root Docker build for the Space
+- `hospital_council_env/openenv.yaml`: OpenEnv manifest
+- `hospital_council_env/server/app.py`: FastAPI entrypoint
 
-## Lab Integration
+If you want the Space to use real MIMIC data instead of synthetic bootstrap mode, add a Space secret or runtime variable named `MIMIC_DATA_ROOT` and mount the licensed dataset in that path. Otherwise the Space will run in synthetic mode automatically.
 
-The environment now integrates `hosp/labevents.csv.gz` and `hosp/d_labitems.csv.gz` into the encounter representation. For sampled admissions it tracks:
-
-- total lab event count
-- abnormal lab event count
-- salient abnormal lab labels
-- salient lab categories
-
-These signals appear in the patient snapshot and influence scenario framing, diagnostic pressure, and the simulated retrieval context.
-
-## Quick Start
+## Local Validation
 
 Use the repo venv:
 
 ```bash
+.\.venv\Scripts\openenv.exe validate hospital_council_env -v
 .\.venv\Scripts\python.exe run_openenv_demo.py --data-root physionet.org/files/mimiciv/3.1 --episodes 4 --sample-size 1000
-```
-
-Record a JSONL rollout for the demo video:
-
-```bash
-.\.venv\Scripts\python.exe run_openenv_demo.py --data-root physionet.org/files/mimiciv/3.1 --episodes 2 --sample-size 1000 --record-path artifacts/demo_rollout.jsonl
-```
-
-Run full local metrics:
-
-```bash
 .\.venv\Scripts\python.exe -m hospital_council_env.training.evaluate_policy --data-root physionet.org/files/mimiciv/3.1 --episodes 20 --sample-size 1000 --policy baseline
 ```
 
-That prints:
-
-- average reward
-- success rate
-- phase-action accuracy
-- category accuracy
-- milestone hit rate
-- coalition threshold rate
-- average task-graph loss
-- web-augmented step rate
-- average context confidence
-- guided replace rate
-- per-scenario averages
-
-Validate the environment package:
-
-```bash
-.\.venv\Scripts\openenv.exe validate hospital_council_env -v
-```
-
-Run the local OpenEnv server:
-
-```bash
-cd hospital_council_env
-..\.venv\Scripts\uv.exe run server
-```
-
-If PowerShell dislikes the spacing, use:
+Run the server locally:
 
 ```bash
 Set-Location hospital_council_env
 ..\.venv\Scripts\python.exe -m hospital_council_env.server.app
 ```
 
-Then test the real server-client loop end to end from the repo root:
+Then check the real client-server loop:
 
 ```bash
 .\.venv\Scripts\python.exe -m hospital_council_env.training.evaluate_remote_client --base-url http://localhost:8000 --episodes 5
@@ -173,51 +116,33 @@ Then test the real server-client loop end to end from the repo root:
 
 ## Training
 
-Minimal TRL script:
+Minimal TRL entrypoint:
 
 ```bash
 .\.venv\Scripts\python.exe -m hospital_council_env.training.hf_trl_grpo_minimal --model Qwen/Qwen3-0.6B
 ```
 
-That script follows the official `environment_factory` pattern from TRL’s OpenEnv integration docs and exposes environment methods as tools.
+This follows the official `environment_factory` pattern from the Hugging Face TRL OpenEnv docs.
 
-## End-to-End Test Order
+## Evidence
 
-If you want the full local test flow in the simplest order:
-
-1. `.\.venv\Scripts\openenv.exe validate hospital_council_env -v`
-2. `.\.venv\Scripts\python.exe run_openenv_demo.py --data-root physionet.org/files/mimiciv/3.1 --episodes 4 --sample-size 1000`
-3. `.\.venv\Scripts\python.exe -m hospital_council_env.training.evaluate_policy --data-root physionet.org/files/mimiciv/3.1 --episodes 20 --sample-size 1000 --policy baseline`
-4. Start the server in `hospital_council_env/`
-5. `.\.venv\Scripts\python.exe -m hospital_council_env.training.evaluate_remote_client --base-url http://localhost:8000 --episodes 5`
-
-## Submission Checklist
-
-Manual items still required before final submission:
-
-- Hugging Face Space URL: REQUIRED
-- Hugging Face mini-blog URL (or equivalent short writeup): REQUIRED
-- Short demo video URL (< 2 minutes): REQUIRED
-- Reward curve image path or WandB link from a real training run: REQUIRED
-- Trained vs untrained rollout comparison link: REQUIRED
-
-Verified local evidence already in repo:
+Local evidence tracked in the repo:
 
 - Baseline metrics JSON: [docs/evidence/metrics_baseline.json](docs/evidence/metrics_baseline.json)
 - Random metrics JSON: [docs/evidence/metrics_random.json](docs/evidence/metrics_random.json)
-- Metrics comparison summary: [docs/evidence/reward_comparison.md](docs/evidence/reward_comparison.md)
+- Comparison summary: [docs/evidence/reward_comparison.md](docs/evidence/reward_comparison.md)
 - Verified demo rollout: [docs/evidence/demo_rollout_verified.jsonl](docs/evidence/demo_rollout_verified.jsonl)
+- Demo script: [docs/demo_video_script.md](docs/demo_video_script.md)
+- Compliance audit: [docs/requirement_audit_2026-04-25.md](docs/requirement_audit_2026-04-25.md)
 
-Use [docs/demo_video_script.md](docs/demo_video_script.md) as the recording outline.
-Use [docs/requirement_audit_2026-04-25.md](docs/requirement_audit_2026-04-25.md) for the latest compliance audit.
+## Final Submission TODOs
 
-## Validation Notes
+These are still manual because they depend on your published assets:
 
-This package was locally checked with:
-
-- `python -m py_compile` on the environment package
-- `openenv validate hospital_council_env -v`
-- local demo rollouts via `python -m hospital_council_env.training.run_local_demo`
+- add the final Hugging Face Space URL
+- add the mini-blog URL or short demo video URL
+- add reward/loss plots from a real training run
+- add trained-vs-untrained rollout evidence once that run is complete
 
 ## References
 

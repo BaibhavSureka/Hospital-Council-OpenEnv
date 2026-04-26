@@ -16,9 +16,11 @@ tags:
 
 # Hospital Council OpenEnv
 
-`hospital_council_env` is a long-horizon, multi-agent environment for training LLMs to coordinate a hospital council under partial observability.
+`hospital_council_env` is the deployable OpenEnv package for the Hospital Council submission. It is a long-horizon, multi-agent environment where the model coordinates a hospital council under partial observability.
 
-The model acts as a coordinator managing five stakeholders:
+## Core Idea
+
+The agent manages five stakeholders:
 
 - attending physician
 - triage nurse
@@ -26,22 +28,19 @@ The model acts as a coordinator managing five stakeholders:
 - bed manager
 - family liaison
 
-Episodes are seeded from real MIMIC-IV encounter statistics and organized into balanced scenario families:
+Episodes are organized into four scenario families:
 
 - `diagnostic_ambiguity`
 - `medication_alignment`
 - `conservative_monitoring`
 - `discharge_negotiation`
 
-## Why this environment is interesting
+## Why it is useful for training
 
-This environment is designed for the OpenEnv Hackathon themes rather than just being a generic benchmark:
-
-- **Multi-agent interactions**: stakeholders have different incentives and hidden beliefs.
-- **Long-horizon planning**: the right move depends on what happened several turns earlier.
-- **World modeling**: the patient trajectory, coalition support, and safety state all evolve over time.
-- **Dynamic monitoring**: each episode exposes an active task graph and a task-graph loss that changes after every action.
-- **Self-contained retrieval**: an LLM-style search module generates and ranks pseudo-documents for the query-action pair.
+- **Multi-agent interactions**. Stakeholders carry different incentives and different levels of alignment.
+- **Long-horizon planning**. The best move depends on earlier consultation, coalition shaping, and execution timing.
+- **World modeling**. Hidden clinical and operational state evolves as actions are taken.
+- **Dense supervision**. Task-graph state, rubric scores, and context feedback give a rich learning signal.
 
 ## Action Space
 
@@ -53,7 +52,7 @@ The coordinator can make five structured moves:
 - `resolve`
 - `commit`
 
-Each action can also specify:
+Actions can also specify:
 
 - `target`
 - `category`
@@ -63,26 +62,18 @@ Each action can also specify:
 
 ## Observation Space
 
-Each step returns a partially observed view containing:
+Each step returns:
 
 - mission brief
-- visible patient snapshot
+- patient snapshot
 - stakeholder updates
 - visible conflicts
-- retrieved analogies from historical failures
-- task-graph monitoring state
-- LLM-search augmentation signals
-- Context LLM Manager feedback
+- retrieved analogies
+- `task_graph`
+- `web_augmentation`
+- `context_observation`
 - long-horizon goals
 - scoreboard metrics
-
-The hidden state tracks:
-
-- milestone plan
-- coalition support
-- diagnostic clarity
-- medication progress
-- discharge readiness
 
 ## Reward
 
@@ -95,24 +86,23 @@ Rewards are built with OpenEnv rubrics and combine:
 - terminal success
 - task-graph score
 
-This makes the reward signal dense enough for training while still keeping a meaningful delayed component.
+## Retrieval and Feedback
 
-## Augmentation
+The environment adds two structured guidance layers:
 
-The observation includes `task_graph`, `web_augmentation`, and `context_observation` fields. `task_graph.loss` monitors whether the current action matches the active phase node. `web_augmentation` contains simulated search results, valid use cases, supporting evidence, and trajectory overlaps. `context_observation` adds classification, confidence, correction, and next-step guidance.
+- `web_augmentation`: a self-contained LLM-style pseudo-search and ranking layer
+- `context_observation`: classification, confidence, correction, and next-step guidance
 
-This retrieval layer is fully self-contained and does not require external APIs.
+This keeps the environment self-contained while still exposing the kind of reasoning scaffolding that helps with long-horizon agent training.
 
-## MIMIC Lab Signals
+## Data Mode
 
-The environment now reads `hosp/labevents.csv.gz` and `hosp/d_labitems.csv.gz` and injects lab burden into the patient snapshot:
+When `MIMIC_DATA_ROOT` points to licensed MIMIC-IV data, the simulator samples MIMIC-derived encounter seeds and lab signals from:
 
-- `lab_signal_count`
-- `abnormal_lab_signal_count`
-- `salient_labs`
-- `salient_lab_categories`
+- `hosp/labevents.csv.gz`
+- `hosp/d_labitems.csv.gz`
 
-Those lab signals feed scenario framing, diagnostic uncertainty, and the LLM-style retrieval context.
+When that data is unavailable, the environment falls back automatically to a synthetic bootstrap set so a public Hugging Face Space can still run. The active source is surfaced as `patient_snapshot.data_source`.
 
 ## Local Development
 
@@ -134,10 +124,10 @@ Run a local demo rollout:
 python -m hospital_council_env.training.run_local_demo --data-root ../physionet.org/files/mimiciv/3.1
 ```
 
-Record rollout events for a demo video:
+Record a rollout for demo evidence:
 
 ```bash
-python -m hospital_council_env.training.run_local_demo --data-root ../physionet.org/files/mimiciv/3.1 --record-path ../artifacts/demo_rollout.jsonl
+python -m hospital_council_env.training.run_local_demo --data-root ../physionet.org/files/mimiciv/3.1 --record-path ../docs/evidence/demo_rollout_verified.jsonl
 ```
 
 ## Minimal TRL Training
@@ -148,24 +138,20 @@ The package includes:
 python -m hospital_council_env.training.hf_trl_grpo_minimal
 ```
 
-This follows the official `environment_factory` pattern from TRL’s OpenEnv integration.
+This follows the official `environment_factory` pattern from the Hugging Face TRL OpenEnv docs.
 
-## Submission Assets
-
-Manual links still required before final submission:
-
-- HF Space URL: REQUIRED
-- Blog post URL: REQUIRED
-- 2-minute video URL: REQUIRED
-- Reward curve artifact from a real training run: REQUIRED
-
-Local evidence currently available:
+## Evidence
 
 - Baseline metrics JSON: [../docs/evidence/metrics_baseline.json](../docs/evidence/metrics_baseline.json)
 - Random metrics JSON: [../docs/evidence/metrics_random.json](../docs/evidence/metrics_random.json)
 - Comparison summary: [../docs/evidence/reward_comparison.md](../docs/evidence/reward_comparison.md)
 - Verified rollout JSONL: [../docs/evidence/demo_rollout_verified.jsonl](../docs/evidence/demo_rollout_verified.jsonl)
+- Compliance audit: [../docs/requirement_audit_2026-04-25.md](../docs/requirement_audit_2026-04-25.md)
 
-Full compliance audit:
+## Manual Submission Assets
 
-- [../docs/requirement_audit_2026-04-25.md](../docs/requirement_audit_2026-04-25.md)
+Add these after publishing:
+
+- final Hugging Face Space URL
+- blog post URL or short demo video URL
+- reward/loss plots from a real training run

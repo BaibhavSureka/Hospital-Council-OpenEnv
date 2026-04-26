@@ -186,6 +186,7 @@ class MIMICCouncilSimulator:
         context_manager: Optional[ContextLLMManager] = None,
     ) -> None:
         self.dataset_root = self._resolve_dataset_root(Path(data_root))
+        self.data_source = "mimic_bootstrap" if self.dataset_root is not None else "synthetic_bootstrap"
         self.max_steps = max(5, int(max_steps))
         self.sample_size = max(100, int(sample_size))
         self.table_row_limit = (
@@ -201,17 +202,20 @@ class MIMICCouncilSimulator:
         self.llm_search_augmenter = llm_search_augmenter or LLMSearchAugmenter.from_env()
         self.context_manager = context_manager or ContextLLMManager()
         self.scenario_cursor = 0
-        self._load_data()
+        if self.dataset_root is None:
+            self._load_synthetic_records()
+        else:
+            self._load_data()
 
-    def _resolve_dataset_root(self, data_root: Path) -> Path:
+    def _resolve_dataset_root(self, data_root: Path) -> Optional[Path]:
         if not data_root.exists():
-            raise FileNotFoundError(f"Path not found: {data_root}")
+            return None
         if (data_root / "hosp").exists() and (data_root / "icu").exists():
             return data_root
         for candidate in data_root.rglob("*"):
             if candidate.is_dir() and (candidate / "hosp").exists() and (candidate / "icu").exists():
                 return candidate
-        raise FileNotFoundError("Could not find MIMIC folder containing both 'hosp/' and 'icu/'.")
+        return None
 
     def _read_csv(
         self,
@@ -508,6 +512,156 @@ class MIMICCouncilSimulator:
         self.records = records
         self._bucket_records()
 
+    def _load_synthetic_records(self) -> None:
+        self.records = [
+            EncounterRecord(
+                hadm_id=900001,
+                subject_id=910001,
+                los_hours=42.0,
+                in_icu=1,
+                expired_flag=0,
+                age=71.0,
+                diag_count=0,
+                med_count=0,
+                proc_count=2,
+                transfer_count=2,
+                meds=(),
+                lab_event_count=11,
+                abnormal_lab_event_count=4,
+                salient_labs=("troponin", "lactate", "creatinine"),
+                salient_lab_categories=("chemistry", "blood gas"),
+            ),
+            EncounterRecord(
+                hadm_id=900002,
+                subject_id=910002,
+                los_hours=58.0,
+                in_icu=0,
+                expired_flag=0,
+                age=64.0,
+                diag_count=1,
+                med_count=3,
+                proc_count=1,
+                transfer_count=1,
+                meds=("heparin", "ceftriaxone", "furosemide"),
+                lab_event_count=8,
+                abnormal_lab_event_count=2,
+                salient_labs=("white blood cell count", "sodium"),
+                salient_lab_categories=("hematology", "chemistry"),
+            ),
+            EncounterRecord(
+                hadm_id=900003,
+                subject_id=910003,
+                los_hours=30.0,
+                in_icu=0,
+                expired_flag=0,
+                age=52.0,
+                diag_count=2,
+                med_count=0,
+                proc_count=0,
+                transfer_count=0,
+                meds=(),
+                lab_event_count=4,
+                abnormal_lab_event_count=1,
+                salient_labs=("potassium",),
+                salient_lab_categories=("chemistry",),
+            ),
+            EncounterRecord(
+                hadm_id=900004,
+                subject_id=910004,
+                los_hours=102.0,
+                in_icu=0,
+                expired_flag=0,
+                age=47.0,
+                diag_count=3,
+                med_count=1,
+                proc_count=0,
+                transfer_count=1,
+                meds=("acetaminophen",),
+                lab_event_count=5,
+                abnormal_lab_event_count=0,
+                salient_labs=("hemoglobin",),
+                salient_lab_categories=("hematology",),
+            ),
+            EncounterRecord(
+                hadm_id=900005,
+                subject_id=910005,
+                los_hours=68.0,
+                in_icu=1,
+                expired_flag=0,
+                age=79.0,
+                diag_count=0,
+                med_count=1,
+                proc_count=2,
+                transfer_count=3,
+                meds=("vancomycin",),
+                lab_event_count=15,
+                abnormal_lab_event_count=5,
+                salient_labs=("lactate", "blood culture", "creatinine"),
+                salient_lab_categories=("chemistry", "microbiology"),
+            ),
+            EncounterRecord(
+                hadm_id=900006,
+                subject_id=910006,
+                los_hours=77.0,
+                in_icu=0,
+                expired_flag=0,
+                age=60.0,
+                diag_count=2,
+                med_count=4,
+                proc_count=1,
+                transfer_count=2,
+                meds=("piperacillin tazobactam", "insulin", "metoprolol"),
+                lab_event_count=9,
+                abnormal_lab_event_count=2,
+                salient_labs=("glucose", "magnesium"),
+                salient_lab_categories=("chemistry",),
+            ),
+            EncounterRecord(
+                hadm_id=900007,
+                subject_id=910007,
+                los_hours=50.0,
+                in_icu=0,
+                expired_flag=0,
+                age=69.0,
+                diag_count=1,
+                med_count=0,
+                proc_count=0,
+                transfer_count=1,
+                meds=(),
+                lab_event_count=3,
+                abnormal_lab_event_count=0,
+                salient_labs=("platelet count",),
+                salient_lab_categories=("hematology",),
+            ),
+            EncounterRecord(
+                hadm_id=900008,
+                subject_id=910008,
+                los_hours=95.0,
+                in_icu=0,
+                expired_flag=0,
+                age=56.0,
+                diag_count=2,
+                med_count=1,
+                proc_count=0,
+                transfer_count=2,
+                meds=("amoxicillin",),
+                lab_event_count=6,
+                abnormal_lab_event_count=1,
+                salient_labs=("bilirubin",),
+                salient_lab_categories=("chemistry",),
+            ),
+        ]
+        self.medication_terms = sorted(
+            {
+                normalized
+                for record in self.records
+                for med in record.meds
+                for normalized in [_normalize_text(med)]
+                if normalized
+            }
+        )
+        self._bucket_records()
+
     def _bucket_records(self) -> None:
         for record in self.records:
             self.scenario_buckets[self._classify_record(record)].append(record)
@@ -629,6 +783,7 @@ class MIMICCouncilSimulator:
 
     def _patient_snapshot(self, record: EncounterRecord) -> Dict[str, Any]:
         return {
+            "data_source": self.data_source,
             "age_band": "older_adult" if record.age >= 65 else "adult",
             "los_hours": round(record.los_hours, 1),
             "icu": bool(record.in_icu),

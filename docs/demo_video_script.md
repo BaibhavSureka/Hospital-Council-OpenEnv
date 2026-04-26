@@ -42,7 +42,7 @@ Run the evaluator and show:
 ## Commands To Record
 
 ```bash
-.\.venv\Scripts\python.exe run_openenv_demo.py --data-root physionet.org/files/mimiciv/3.1 --episodes 2 --sample-size 1000 --record-path artifacts/demo_rollout.jsonl
+.\.venv\Scripts\python.exe run_openenv_demo.py --data-root physionet.org/files/mimiciv/3.1 --episodes 2 --sample-size 1000 --record-path docs/evidence/demo_rollout_verified.jsonl
 ```
 
 ```bash
