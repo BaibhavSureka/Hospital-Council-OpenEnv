@@ -12,17 +12,11 @@ The hackathon submission environment lives in `hospital_council_env/`. The older
 
 ## Submission Links
 
-Replace the three placeholders below with your final public URLs before submitting the Google Form:
+Public submission URLs:
 
-- Hugging Face Space: `REPLACE_WITH_PUBLIC_SPACE_URL`
-- Public training notebook: `REPLACE_WITH_PUBLIC_NOTEBOOK_URL`
-- Public blog post: `REPLACE_WITH_PUBLIC_BLOG_URL`
-
-Recommended final URLs:
-
-- Space: `https://huggingface.co/spaces/<user-or-org>/<space-name>`
-- Notebook in repo: `https://huggingface.co/spaces/<user-or-org>/<space-name>/blob/main/Hospital_Council_OpenEnv_Colab_Training.ipynb`
-- Blog in repo: `https://huggingface.co/spaces/<user-or-org>/<space-name>/blob/main/Blog.md`
+- Hugging Face Space: `https://huggingface.co/spaces/BAIBHAV1234/hospital-council-openenv`
+- Public training notebook: `https://huggingface.co/spaces/BAIBHAV1234/hospital-council-openenv/blob/main/Hospital_Council_OpenEnv_Colab_Training.ipynb`
+- Public blog post: `https://huggingface.co/spaces/BAIBHAV1234/hospital-council-openenv/blob/main/Blog.md`
 
 ## Why This Fits The Hackathon
 
@@ -95,7 +89,8 @@ Files that matter most:
 
 Useful endpoints after deployment:
 
-- `/` redirects to the OpenEnv UI
+- `/` shows the Space landing page
+- `/web` shows the same landing page for Space path probes
 - `/status`
 - `/health`
 
@@ -177,11 +172,11 @@ The only missing evidence artifact in-git is the final GRPO reward/loss plot exp
 
 Only three external publication steps remain before form submission:
 
-1. Push this repo to a public Hugging Face Space and replace `REPLACE_WITH_PUBLIC_SPACE_URL`.
-2. Confirm the notebook URL is public and replace `REPLACE_WITH_PUBLIC_NOTEBOOK_URL`.
-3. Publish the repo with `Blog.md` visible in the Space repo and replace `REPLACE_WITH_PUBLIC_BLOG_URL`.
+1. Confirm the Space opens publicly at `https://huggingface.co/spaces/BAIBHAV1234/hospital-council-openenv`.
+2. Confirm the notebook file is visible publicly at `https://huggingface.co/spaces/BAIBHAV1234/hospital-council-openenv/blob/main/Hospital_Council_OpenEnv_Colab_Training.ipynb`.
+3. Confirm `Blog.md` is visible publicly at `https://huggingface.co/spaces/BAIBHAV1234/hospital-council-openenv/blob/main/Blog.md`.
 
-After those URLs are filled in, submit the same three public links in the Google Form.
+After those links are public, submit the same three URLs in the Google Form.
 
 ## References
 

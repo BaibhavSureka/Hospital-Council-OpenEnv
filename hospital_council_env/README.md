@@ -37,10 +37,10 @@ Episodes are organized into four scenario families:
 
 ## Why it is useful for training
 
-- **Multi-agent interactions**. Stakeholders carry different incentives and different levels of alignment.
-- **Long-horizon planning**. The best move depends on earlier consultation, coalition shaping, and execution timing.
-- **World modeling**. Hidden clinical and operational state evolves as actions are taken.
-- **Dense supervision**. Task-graph state, rubric scores, and context feedback give a rich learning signal.
+- Multi-agent interactions. Stakeholders carry different incentives and different levels of alignment.
+- Long-horizon planning. The best move depends on earlier consultation, coalition shaping, and execution timing.
+- World modeling. Hidden clinical and operational state evolves as actions are taken.
+- Dense supervision. Task-graph state, rubric scores, and context feedback give a rich learning signal.
 
 ## Action Space
 
@@ -150,8 +150,12 @@ This follows the official `environment_factory` pattern from the Hugging Face TR
 
 ## Manual Submission Assets
 
-Add these after publishing:
+Public submission URLs:
 
-- final Hugging Face Space URL
-- blog post URL or short demo video URL
+- Hugging Face Space: `https://huggingface.co/spaces/BAIBHAV1234/hospital-council-openenv`
+- Training notebook: `https://huggingface.co/spaces/BAIBHAV1234/hospital-council-openenv/blob/main/Hospital_Council_OpenEnv_Colab_Training.ipynb`
+- Blog post: `https://huggingface.co/spaces/BAIBHAV1234/hospital-council-openenv/blob/main/Blog.md`
+
+Still recommended before judging:
+
 - reward/loss plots from a real training run
